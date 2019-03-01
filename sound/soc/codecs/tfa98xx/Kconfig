@@ -1,0 +1,3 @@
+
+config SND_SOC_TFA98XX
+       tristate "TFA98XX Speaker PA Driver"
