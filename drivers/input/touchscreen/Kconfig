@@ -12,6 +12,7 @@ menuconfig INPUT_TOUCHSCREEN
 if INPUT_TOUCHSCREEN
 
 source "drivers/input/touchscreen/atmel/Kconfig"
+source "drivers/input/touchscreen/synaptics_3708/Kconfig"
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
 
 config OF_TOUCHSCREEN
