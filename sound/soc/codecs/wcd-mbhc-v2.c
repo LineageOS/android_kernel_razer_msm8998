@@ -60,6 +60,48 @@ module_param(det_extn_cable_en, int,
 		S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(det_extn_cable_en, "enable/disable extn cable detect");
 
+//MM-JC-headset detect-00+{
+#ifndef CONFIG_FIH_9800
+#define LEGACY_SWITCH_DEV_SUPPORT
+#endif
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+#include <linux/switch.h>
+#include <asm/atomic.h>
+
+struct h2w_info {
+	struct switch_dev sdev;
+	atomic_t btn_state;
+	atomic_t hs_state;
+};
+static struct h2w_info *fih_hs;
+
+static ssize_t trout_h2w_print_name(struct switch_dev *sdev, char *buf)
+{
+       int state = 0;
+       state = switch_get_state(&fih_hs->sdev);
+
+	switch (state)
+	{
+		case MBHC_PLUG_TYPE_NONE:
+			return sprintf(buf, "No Device\n");
+		case MBHC_PLUG_TYPE_HEADSET:
+			return sprintf(buf, "Headset\n");
+		case MBHC_PLUG_TYPE_HEADPHONE:
+			return sprintf(buf, "Headphone\n");
+	}
+
+	return -EINVAL;
+}
+static ssize_t show_btn_state(struct device *dev,struct device_attribute *attr, char *buf)
+{
+	unsigned char btn_state;
+	btn_state = atomic_read(&fih_hs->btn_state);
+	return sprintf(buf, "%u\n", btn_state);
+}
+static DEVICE_ATTR(btn_state, S_IRUGO, show_btn_state, NULL);
+#endif
+//MM-JC-headset detect-00+}
+
 enum wcd_mbhc_cs_mb_en_flag {
 	WCD_MBHC_EN_CS = 0,
 	WCD_MBHC_EN_MB,
@@ -773,6 +815,15 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 				    WCD_MBHC_JACK_MASK);
 		wcd_mbhc_clr_and_turnon_hph_padac(mbhc);
 	}
+	//MM-JC-headset detect-00+{
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+	if(fih_hs)
+	{
+		switch_set_state(&fih_hs->sdev, mbhc->current_plug);
+		pr_debug("%s: switch_set_state %d\n", __func__, mbhc->current_plug);
+	}
+#endif
+	//MM-JC-headset detect-00+}
 	pr_debug("%s: leave hph_status %x\n", __func__, mbhc->hph_status);
 }
 
@@ -1973,6 +2024,15 @@ static void wcd_btn_lpress_fn(struct work_struct *work)
 		wcd_mbhc_jack_report(mbhc, &mbhc->button_jack,
 				mbhc->buttons_pressed, mbhc->buttons_pressed);
 	}
+	//MM-JC-headset detect-00+{
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+	if(fih_hs)
+	{
+		atomic_set(&fih_hs->btn_state, 1);
+		pr_debug("%s: switch_set_btn_state press\n", __func__);
+	}
+#endif
+	//MM-JC-headset detect-00+}
 	pr_debug("%s: leave\n", __func__);
 	mbhc->mbhc_cb->lock_sleep(mbhc, false);
 }
@@ -2088,6 +2148,15 @@ static irqreturn_t wcd_mbhc_release_handler(int irq, void *data)
 				 __func__);
 			wcd_mbhc_jack_report(mbhc, &mbhc->button_jack,
 					0, mbhc->buttons_pressed);
+			//MM-JC-headset detect-00+{
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+			if(fih_hs)
+			{
+				atomic_set(&fih_hs->btn_state, 0);
+				pr_debug("%s: switch_set_btn_state release\n", __func__);
+			}
+#endif
+			//MM-JC-headset detect-00+}
 		} else {
 			if (mbhc->in_swch_irq_handler) {
 				pr_debug("%s: Switch irq kicked in, ignore\n",
@@ -2099,11 +2168,29 @@ static irqreturn_t wcd_mbhc_release_handler(int irq, void *data)
 						     &mbhc->button_jack,
 						     mbhc->buttons_pressed,
 						     mbhc->buttons_pressed);
+				//MM-JC-headset detect-00+{
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+				if(fih_hs)
+				{
+					atomic_set(&fih_hs->btn_state, 1);
+					pr_debug("%s: switch_set_btn_state press\n", __func__);
+				}
+#endif
+				//MM-JC-headset detect-00+}
 				pr_debug("%s: Reporting btn release\n",
 					 __func__);
 				wcd_mbhc_jack_report(mbhc,
 						&mbhc->button_jack,
 						0, mbhc->buttons_pressed);
+				//MM-JC-headset detect-00+{
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+				if(fih_hs)
+				{
+					atomic_set(&fih_hs->btn_state, 0);
+					pr_debug("%s: switch_set_btn_state release\n", __func__);
+				}
+#endif
+				//MM-JC-headset detect-00+}
 			}
 		}
 		mbhc->buttons_pressed &= ~WCD_MBHC_JACK_BUTTON_MASK;
@@ -2611,6 +2698,9 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *mbhc_cfg)
 	struct snd_soc_codec *codec;
 	struct snd_soc_card *card;
 	const char *usb_c_dt = "qcom,msm-mbhc-usbc-audio-supported";
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+	int ret = 0;
+#endif
 
 	if (!mbhc || !mbhc_cfg)
 		return -EINVAL;
@@ -2693,7 +2783,37 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *mbhc_cfg)
 			pr_err("%s: Skipping to read mbhc fw, 0x%pK %pK\n",
 				 __func__, mbhc->mbhc_fw, mbhc->mbhc_cal);
 	}
-
+	//MM-JC-headset detect-00+{
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+	if (!fih_hs){
+		pr_debug("%s: kzalloc fih_hs\n", __func__);
+		fih_hs = kzalloc(sizeof(struct h2w_info), GFP_KERNEL);
+		if (!fih_hs)
+			return -ENOMEM;
+		atomic_set(&fih_hs->btn_state, 0);
+		atomic_set(&fih_hs->hs_state, 0);
+		fih_hs->sdev.name = "h2w";
+		fih_hs->sdev.print_name = trout_h2w_print_name;
+		ret = switch_dev_register(&fih_hs->sdev);
+		if (!ret){
+			ret = device_create_file(fih_hs->sdev.dev,&dev_attr_btn_state);
+			if(ret)
+			{
+				pr_err("%s: device_create_file btn_state fail %d!\n", __func__, ret);
+				switch_dev_unregister(&fih_hs->sdev);
+				kzfree(fih_hs);
+			}
+		}
+		else	{
+			pr_err("%s: switch_dev_register (%s) fail %d\n", __func__, fih_hs->sdev.name, ret);
+			kzfree(fih_hs);
+		}
+	}
+	else	{
+		pr_err("%s: fih_hs already exist with name(%s)\n", __func__, fih_hs->sdev.name);
+	}
+#endif
+	//MM-JC-headset detect-00+{
 	return rc;
 err:
 	if (config->usbc_en1_gpio > 0) {

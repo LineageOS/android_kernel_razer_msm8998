@@ -47,6 +47,12 @@
 #include "wcd_cpe_core.h"
 #include "wcdcal-hwdep.h"
 
+#if defined(CONFIG_FIH_9800) || defined(CONFIG_FIH_9802)
+#undef USE_QC_MBHC
+#else
+#define USE_QC_MBHC
+#endif
+
 #define TASHA_RX_PORT_START_NUMBER  16
 
 #define WCD9335_RATES_MASK (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |\
@@ -613,6 +619,7 @@ struct wcd_swr_ctrl_platform_data {
 			  int action);
 };
 
+#ifdef USE_QC_MBHC
 static struct wcd_mbhc_register
 	wcd_mbhc_registers[WCD_MBHC_REG_FUNC_MAX] = {
 	WCD_MBHC_REGISTER("WCD_MBHC_L_DET_EN",
@@ -687,6 +694,7 @@ static struct wcd_mbhc_register
 	WCD_MBHC_REGISTER("WCD_MBHC_MUX_CTL",
 			  WCD9335_MBHC_CTL_2, 0x70, 4, 0),
 };
+#endif
 
 static const struct wcd_mbhc_intr intr_ids = {
 	.mbhc_sw_intr =  WCD9335_IRQ_MBHC_SW_DET,
@@ -2580,6 +2588,7 @@ static int slim_tx_mixer_put(struct snd_kcontrol *kcontrol,
 		if (dai_id >= ARRAY_SIZE(vport_i2s_check_table)) {
 			dev_err(codec->dev, "%s: dai_id: %d, out of bounds\n",
 				__func__, dai_id);
+			mutex_unlock(&tasha_p->codec_mutex);
 			return -EINVAL;
 		}
 		vtable = vport_i2s_check_table[dai_id];
@@ -12423,6 +12432,7 @@ static int tasha_codec_internal_rco_ctrl(struct snd_soc_codec *codec,
 	return ret;
 }
 
+#ifdef USE_QC_MBHC
 /*
  * tasha_mbhc_hs_detect: starts mbhc insertion/removal functionality
  * @codec: handle to snd_soc_codec *
@@ -12449,6 +12459,7 @@ void tasha_mbhc_hs_detect_exit(struct snd_soc_codec *codec)
 	wcd_mbhc_stop(&tasha->mbhc);
 }
 EXPORT_SYMBOL(tasha_mbhc_hs_detect_exit);
+#endif
 
 static int wcd9335_get_micb_vout_ctl_val(u32 micb_mv)
 {
@@ -13530,6 +13541,7 @@ static int tasha_post_reset_cb(struct wcd9xxx *wcd9xxx)
 
 	/* Reset reference counter for voting for max bw */
 	tasha->ref_count = 0;
+#ifdef USE_QC_MBHC
 	/* MBHC Init */
 	wcd_mbhc_deinit(&tasha->mbhc);
 	tasha->mbhc_started = false;
@@ -13542,6 +13554,7 @@ static int tasha_post_reset_cb(struct wcd9xxx *wcd9xxx)
 			__func__);
 	else
 		tasha_mbhc_hs_detect(codec, tasha->mbhc.mbhc_cfg);
+#endif
 
 	tasha_cleanup_irqs(tasha);
 	ret = tasha_setup_irqs(tasha);
@@ -13653,7 +13666,9 @@ static int tasha_codec_probe(struct snd_soc_codec *codec)
 		goto err;
 	}
 	set_bit(WCD9XXX_ANC_CAL, tasha->fw_data->cal_bit);
+#ifdef USE_QC_MBHC
 	set_bit(WCD9XXX_MBHC_CAL, tasha->fw_data->cal_bit);
+#endif
 	set_bit(WCD9XXX_MAD_CAL, tasha->fw_data->cal_bit);
 	set_bit(WCD9XXX_VBAT_CAL, tasha->fw_data->cal_bit);
 
@@ -13664,6 +13679,7 @@ static int tasha_codec_probe(struct snd_soc_codec *codec)
 		goto err_hwdep;
 	}
 
+#ifdef USE_QC_MBHC
 	/* Initialize MBHC module */
 	if (TASHA_IS_2_0(tasha->wcd9xxx)) {
 		wcd_mbhc_registers[WCD_MBHC_FSM_STATUS].reg =
@@ -13676,6 +13692,7 @@ static int tasha_codec_probe(struct snd_soc_codec *codec)
 		pr_err("%s: mbhc initialization failed\n", __func__);
 		goto err_hwdep;
 	}
+#endif
 
 	ptr = devm_kzalloc(codec->dev, (sizeof(tasha_rx_chs) +
 			   sizeof(tasha_tx_chs)), GFP_KERNEL);
