@@ -1,0 +1,199 @@
+/* Battery profile*/
+&vendor {
+	mtp_batterydata: qcom,battery-data {
+		#include "batterydata-RCL-4000mah-240k.dtsi"
+	};
+};
+
+
+/* Fuel Gauge */
+&pmi8998_fg {
+	qcom,fg-cutoff-voltage = <3300>;
+	qcom,fg-empty-voltage = <3000>;
+	qcom,fg-chg-term-current = <80>; /* 0.02C */
+	qcom,fg-sys-term-current = <(-250)>; /* Actually battery will reach to 100% when charging current ~= -150 mA */
+	qcom,fg-auto-recharge-soc;
+	qcom,fg-recharge-soc-thr = <99>;
+	qcom,hold-soc-while-full;
+	qcom,battery-thermal-coefficients = [CC 50 FF];
+	qcom,fg-jeita-hyst-temp;
+};
+
+/* pmi8998 charger */
+&pmi8998_charger {
+	qcom,usb-icl-ua = <3000000>;
+	qcom,fcc-max-ua = <3900000>;
+	qcom,fv-max-uv = <4400000>;
+	qcom,jeita-fcc-comp = <0>;
+	qcom,jeita-fv-comp = <300000>;
+	qcom,step-charging-enable;
+	qcom,sw-jeita-enable;
+	//qcom,thermal-mitigation = <3000000 1200000 900000 300000>;
+	qcom,auto-recharge-soc;
+	fih,chg-abnormal-check-en;
+};
+
+/* Unuse GPIOs PMI8998*/
+&spmi_bus {
+	qcom,pmi8998@2 {
+		pmi8998_gpios: gpios {
+			gpio@c000 {
+				reg = <0xc000 0x100>;
+				qcom,pin-num = <1>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@c700 {
+				reg = <0xc700 0x100>;
+				qcom,pin-num = <8>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@c800 {
+				reg = <0xc800 0x100>;
+				qcom,pin-num = <9>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@c900 {
+				reg = <0xc900 0x100>;
+				qcom,pin-num = <10>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@ca00 {
+				reg = <0xca00 0x100>;
+				qcom,pin-num = <11>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@cd00 {
+				reg = <0xcd00 0x100>;
+				qcom,pin-num = <14>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+		};		
+	};
+};
+
+/* Unuse GPIOs PM8998*/
+&spmi_bus {
+	qcom,pm8998@0 {
+		pm8998_gpios: gpios {
+			gpio@c100 {
+				reg = <0xc100 0x100>;
+				qcom,pin-num = <2>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@c400 {
+				reg = <0xc400 0x100>;
+				qcom,pin-num = <5>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@c600 {
+				reg = <0xc600 0x100>;
+				qcom,pin-num = <7>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@c700 {
+				reg = <0xc700 0x100>;
+				qcom,pin-num = <8>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@c800 {
+				reg = <0xc800 0x100>;
+				qcom,pin-num = <9>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@ca00 {
+				reg = <0xca00 0x100>;
+				qcom,pin-num = <11>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@cb00 {
+				reg = <0xcb00 0x100>;
+				qcom,pin-num = <12>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@ce00 {
+				reg = <0xce00 0x100>;
+				qcom,pin-num = <15>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@d200 {
+				reg = <0xd200 0x100>;
+				qcom,pin-num = <19>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@d500 {
+				reg = <0xd500 0x100>;
+				qcom,pin-num = <22>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+		};
+	};
+};
+
+/* Unuse GPIOs PM8005*/
+&spmi_bus {
+	qcom,pm8005@4 {
+		pm8005_gpios: gpios {
+			gpio@c000 {
+				reg = <0xc000 0x100>;
+				qcom,pin-num = <1>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+
+			gpio@c100 {
+				reg = <0xc100 0x100>;
+				qcom,pin-num = <2>;
+				qcom,mode = <0>;
+				qcom,pull = <4>;
+				status = "okay";
+			};
+		};
+	};
+};

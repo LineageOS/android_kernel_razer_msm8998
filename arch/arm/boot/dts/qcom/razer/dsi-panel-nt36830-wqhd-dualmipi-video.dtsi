@@ -1,0 +1,342 @@
+/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&mdss_mdp {
+	dsi_nt36830_wqhd_dualdsi_video: qcom,mdss_dsi_nt36830_wqhd_dualdsi_video {
+		qcom,mdss-dsi-panel-name =
+			"NT36830 dual dsi video mode panel with DSC";
+		qcom,mdss-dsi-panel-type = "dsi_video_mode";
+		qcom,mdss-dsi-panel-framerate = <120>;
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-panel-width = <720>;
+		qcom,mdss-dsi-panel-height = <2560>;
+		qcom,mdss-dsi-h-front-porch = <20>;
+		qcom,mdss-dsi-h-back-porch = <12>;
+		qcom,mdss-dsi-h-pulse-width = <8>;
+		qcom,mdss-dsi-h-sync-skew = <0>;
+		qcom,mdss-dsi-v-back-porch = <14>;
+		qcom,mdss-dsi-v-front-porch = <16>;
+		qcom,mdss-dsi-v-pulse-width = <2>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,mdss-dsi-h-sync-pulse = <0>;
+		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-reset-sequence = <1 10>, <0 10>, <1 10>;
+		qcom,mdss-dsi-te-pin-select = <1>;
+		qcom,mdss-dsi-wr-mem-start = <0x2c>;
+		qcom,mdss-dsi-wr-mem-continue = <0x3c>;
+		qcom,mdss-pan-physical-width-dimension = <71>;
+		qcom,mdss-pan-physical-height-dimension = <126>;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-dsi-te-check-enable;
+		qcom,mdss-dsi-te-using-te-pin;
+		qcom,ulps-enabled;
+		qcom,dcs-cmd-by-left;
+//		qcom,suspend-ulps-enabled;
+		qcom,mdss-dsi-tx-eot-append;
+		qcom,mdss-dsi-lp11-init;
+		qcom,adjust-timer-wakeup-ms = <1>;
+
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+		qcom,mdss-dsi-bl-min-level = <1>;
+		qcom,mdss-dsi-bl-max-level = <4095>;
+		razer,mdss-dsi-bl-skip-enabled;
+		razer,mdss-dsi-bl-skip-range = <900 1310>;
+		qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+		qcom,mdss-dsi-panel-timings = [00 0f 04 03 06 0b 04 04 03 03 04 00];
+		qcom,mdss-dsi-t-clk-post = <0x05>;
+		qcom,mdss-dsi-t-clk-pre = <0x19>;
+
+		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+		qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+
+		qcom,mdss-dsi-on-command = [
+			29 01 00 00 00 00 02 ff d0
+			29 01 00 00 00 00 02 75 40
+			29 01 00 00 0a 00 02 f1 40
+			29 01 00 00 00 00 02 ff 10
+			39 01 00 00 0a 00 06 2c 01 02 04 08 10
+			29 01 00 00 00 00 02 ff d0
+			29 01 00 00 00 00 02 75 00
+			29 01 00 00 0a 00 02 f1 00
+			29 01 00 00 00 00 02 ff 10
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 ba 03
+			29 01 00 00 00 00 02 bc 08
+			29 01 00 00 00 00 02 c0 83
+			39 01 00 00 00 00 11 c1 89 28 00 20 02 00 02 68 03 87 00 0a 03 19 02 63
+			39 01 00 00 00 00 03 c2 10 f0
+			29 01 00 00 00 00 02 d5 00
+			29 01 00 00 00 00 02 d6 00
+			29 01 00 00 00 00 02 de 00
+			29 01 00 00 00 00 02 e1 00
+			29 01 00 00 00 00 02 e5 01
+			29 01 00 00 00 00 02 bb 13
+			29 01 00 00 00 00 02 f6 71
+			29 01 00 00 00 00 02 f7 80
+			39 01 00 00 00 00 05 be 00 10 00 10
+			29 01 00 00 00 00 02 35 00
+			29 01 00 00 00 00 02 ff 20
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 87 02
+			29 01 00 00 00 00 02 5d 00
+			29 01 00 00 00 00 02 5e 14
+			29 01 00 00 00 00 02 5f eb
+			29 01 00 00 00 00 02 ff 24
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 14 00
+			29 01 00 00 00 00 02 15 10
+			29 01 00 00 00 00 02 16 00
+			29 01 00 00 00 00 02 17 10
+			29 01 00 00 00 00 02 b4 00
+			29 01 00 00 00 00 02 b6 30
+			29 01 00 00 00 00 02 24 0f
+			29 01 00 00 00 00 02 25 40
+			29 01 00 00 00 00 02 ff 26
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 60 00
+			29 01 00 00 00 00 02 62 00
+			29 01 00 00 00 00 02 40 00
+			29 01 00 00 00 00 02 ff 28
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 91 02
+			29 01 00 00 00 00 02 ff e0
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 48 81
+			29 01 00 00 00 00 02 8e 09
+			29 01 00 00 00 00 02 ff f0
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 33 20
+			29 01 00 00 00 00 02 34 35
+			29 01 00 00 00 00 02 ff 23
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 06 02
+			29 01 00 00 00 00 02 ff 10
+			39 01 00 00 00 00 03 51 ff ff
+			29 01 00 00 00 00 02 55 03
+			29 01 00 00 00 00 02 53 2c
+			29 01 00 00 00 00 02 b1 01
+			05 01 00 00 78 00 01 11
+			05 01 00 00 00 00 01 29
+		];
+
+		qcom,mdss-dsi-off-command = [
+			29 01 00 00 00 00 02 ff 10
+			29 01 00 00 00 00 02 bc 00
+			05 01 00 00 22 00 01 28
+			05 01 00 00 a6 00 01 10
+		];
+
+		qcom,dynamic-mode-switch-enabled;
+		qcom,dynamic-mode-switch-type = "dynamic-switch-immediate";
+		qcom,mode-switch-commands-state = "dsi_lp_mode";
+		qcom,cmd-to-video-mode-switch-commands = [
+			39 01 00 00 00 00 02 ff 10
+			39 01 00 00 00 00 02 fb 01
+			39 01 00 00 00 00 02 bb 13
+		];
+
+		qcom,video-to-cmd-mode-switch-commands = [
+			39 01 00 00 00 00 02 ff 10
+			39 01 00 00 00 00 02 fb 01
+			39 01 00 00 00 00 02 bb 10
+		];
+
+
+		qcom,mdss-dsi-post-mode-switch-on-command-state = "dsi_lp_mode";
+		qcom,mdss-dsi-post-mode-switch-on-command = [
+			29 01 00 00 00 00 02 ff d0
+			29 01 00 00 00 00 02 75 40
+			29 01 00 00 0a 00 02 f1 40
+			29 01 00 00 00 00 02 ff 10
+			39 01 00 00 0a 00 06 2c 01 02 04 08 10
+			29 01 00 00 00 00 02 ff d0
+			29 01 00 00 00 00 02 75 00
+			29 01 00 00 0a 00 02 f1 00
+			29 01 00 00 00 00 02 ff 10
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 ba 03
+			29 01 00 00 00 00 02 bc 08
+			29 01 00 00 00 00 02 c0 83
+			39 01 00 00 00 00 11 c1 89 28 00 20 02 00 02 68 03 87 00 0a 03 19 02 63
+			39 01 00 00 00 00 03 c2 10 F0
+			29 01 00 00 00 00 02 d5 00
+			29 01 00 00 00 00 02 d6 00
+			29 01 00 00 00 00 02 de 00
+			29 01 00 00 00 00 02 e1 00
+			29 01 00 00 00 00 02 e5 01
+			29 01 00 00 00 00 02 bb 10
+			29 01 00 00 00 00 02 f6 71
+			29 01 00 00 00 00 02 f7 80
+			39 01 00 00 00 00 05 be 00 10 00 10
+			29 01 00 00 00 00 02 35 00
+			29 01 00 00 00 00 02 ff 20
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 87 02
+			29 01 00 00 00 00 02 5d 00
+			29 01 00 00 00 00 02 5e 14
+			29 01 00 00 00 00 02 5f eb
+			29 01 00 00 00 00 02 ff 24
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 14 00
+			29 01 00 00 00 00 02 15 10
+			29 01 00 00 00 00 02 16 00
+			29 01 00 00 00 00 02 17 10
+			29 01 00 00 00 00 02 b4 00
+			29 01 00 00 00 00 02 b6 30
+			29 01 00 00 00 00 02 24 0f
+			29 01 00 00 00 00 02 25 40
+			29 01 00 00 00 00 02 ff 26
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 60 00
+			29 01 00 00 00 00 02 62 00
+			29 01 00 00 00 00 02 40 00
+			29 01 00 00 00 00 02 ff 28
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 91 02
+			29 01 00 00 00 00 02 ff e0
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 48 81
+			29 01 00 00 00 00 02 8e 09
+			29 01 00 00 00 00 02 ff f0
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 33 20
+			29 01 00 00 00 00 02 34 35
+			29 01 00 00 00 00 02 ff 23
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 06 02
+			29 01 00 00 00 00 02 ff 10
+			39 01 00 00 00 00 03 51 ff ff
+			29 01 00 00 00 00 02 55 03
+			29 01 00 00 00 00 02 53 2c
+			29 01 00 00 00 00 02 b1 01
+			05 01 00 00 78 00 01 11
+			05 01 00 00 00 00 01 29
+		];
+
+		razer,night-mode-on-commands-state = "dsi_hs_mode";
+		razer,night-mode-on-commands = [
+			29 01 00 00 00 00 02 ff 10
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 9d 03
+			29 01 00 00 00 00 02 8d 11
+			29 01 00 00 00 00 02 8a 00
+			29 01 00 00 00 00 02 8b 31
+			29 01 00 00 00 00 02 8c 00
+			29 01 00 00 00 00 02 86 11
+			29 01 00 00 00 00 02 80 00
+			29 01 00 00 00 00 02 81 de
+			29 01 00 00 00 00 02 82 ce
+			29 01 00 00 00 00 02 83 00
+			29 01 00 00 00 00 02 84 86
+			29 01 00 00 00 00 02 85 00
+		];
+
+		razer,night-mode-off-commands-state = "dsi_hs_mode";
+		razer,night-mode-off-commands = [
+			29 01 00 00 00 00 02 ff 10
+			29 01 00 00 00 00 02 fb 01
+			29 01 00 00 00 00 02 9d 00
+		];
+
+		qcom,mdss-dsi-min-refresh-rate = <30>;
+		qcom,mdss-dsi-max-refresh-rate = <120>;
+		razer,mdss-dsi-avr-min-refresh-rate = <48>;
+		qcom,mdss-dsi-pan-enable-dynamic-fps;
+		qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
+
+		qcom,mdss-dsi-panel-hdr-enabled;
+		qcom,mdss-dsi-panel-hdr-color-primaries = <15000 16000 33750 15800 13250 34450 7500 3000>;
+		qcom,mdss-dsi-panel-peak-brightness = <4470000>;
+		qcom,mdss-dsi-panel-blackness-level = <3420>;
+
+		qcom,compression-mode = "dsc";
+		qcom,config-select = <&dsi_dual_nt36830_video_config0>;
+		razer,mdss-dsi-disable-sending-pps;
+
+		razer,night-mode-profiles {
+			canndle {
+				cmds-state = "dsi_hs_mode";
+				cmds = [
+					29 01 00 00 00 00 02 ff 10
+					29 01 00 00 00 00 02 fb 01
+					29 01 00 00 00 00 02 87 20
+				];
+			};
+
+			warm_incandescent {
+				cmds-state = "dsi_hs_mode";
+				cmds = [
+					29 01 00 00 00 00 02 ff 10
+					29 01 00 00 00 00 02 fb 01
+					29 01 00 00 00 00 02 87 1d
+				];
+			};
+
+			incandescent {
+				cmds-state = "dsi_hs_mode";
+				cmds = [
+					29 01 00 00 00 00 02 ff 10
+					29 01 00 00 00 00 02 fb 01
+					29 01 00 00 00 00 02 87 1b
+				];
+			};
+
+			halogen {
+				cmds-state = "dsi_hs_mode";
+				cmds = [
+					29 01 00 00 00 00 02 ff 10
+					29 01 00 00 00 00 02 fb 01
+					29 01 00 00 00 00 02 87 18
+				];
+			};
+			fluorescent {
+				cmds-state = "dsi_hs_mode";
+				cmds = [
+					29 01 00 00 00 00 02 ff 10
+					29 01 00 00 00 00 02 fb 01
+					29 01 00 00 00 00 02 87 16
+				];
+			};
+
+			daylight {
+				cmds-state = "dsi_hs_mode";
+				cmds = [
+					29 01 00 00 00 00 02 ff 10
+					29 01 00 00 00 00 02 fb 01
+					29 01 00 00 00 00 02 87 00
+				];
+			};
+		};
+
+		dsi_dual_nt36830_video_config0: config0 {
+			qcom,mdss-dsc-encoders = <1>;
+			qcom,mdss-dsc-slice-height = <32>;
+			qcom,mdss-dsc-slice-width = <720>;
+			qcom,mdss-dsc-slice-per-pkt = <1>;
+
+			qcom,mdss-dsc-bit-per-component = <8>;
+			qcom,mdss-dsc-bit-per-pixel = <8>;
+			qcom,mdss-dsc-block-prediction-enable;
+		};
+	};
+};
