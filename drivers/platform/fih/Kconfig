@@ -22,3 +22,25 @@ config MACH_RCL
 	 Support for Razer Phone, codenamed rcl.
 
 endmenu
+
+menu "FIH driver selection"
+
+config FIH_E2P
+	bool "FIH e2p"
+	default n
+	help
+	  Support for FIH e2p virtual file
+
+config FIH_HWID
+	bool "FIH hwid"
+	default n
+	help
+	  Support for FIH hwid module
+
+config FIH_INFO
+	bool "FIH info"
+	default n
+	help
+	  Support for FIH information virtual file
+
+endmenu
