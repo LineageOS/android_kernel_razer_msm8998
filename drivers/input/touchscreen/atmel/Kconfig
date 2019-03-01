@@ -1,0 +1,5 @@
+config TOUCHSCREEN_ATMEL_MXT640T
+
+	tristate "TOUCHSCREEN_ATMEL_MXT640T"
+	depends on I2C
+	default n

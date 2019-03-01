@@ -373,6 +373,7 @@ struct device_node *of_batterydata_get_best_profile(
 
 	if (best_node == NULL) {
 		pr_err("No battery data found\n");
+		printk("BBox::UEC;49::4\n");
 		return best_node;
 	}
 

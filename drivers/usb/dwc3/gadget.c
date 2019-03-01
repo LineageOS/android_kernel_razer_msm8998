@@ -3265,19 +3265,40 @@ static void dwc3_dump_reg_info(struct dwc3 *dwc)
 	dbg_print_reg("OSTS", dwc3_readl(dwc->regs, DWC3_OSTS));
 }
 
+/* FIH - akckwang - 9801-680 - Dump typec sts register value */
+#if defined(CONFIG_FIH_9801) || defined(CONFIG_FIH_9802)
+extern int dumpTypeCSts(struct dwc3 *dwc);
+#endif
+/* end FIH - 9801-680 */
 static void dwc3_gadget_interrupt(struct dwc3 *dwc,
 		const struct dwc3_event_devt *event)
 {
 	switch (event->type) {
 	case DWC3_DEVICE_EVENT_DISCONNECT:
+/* FIH - akckwang - 9801-680 - Dump typec sts register value */
+#if defined(CONFIG_FIH_9801) || defined(CONFIG_FIH_9802)
+		dev_err(dwc->dev, "%s:DWC3_DEVICE_EVENT_DISCONNECT\n", __func__);
+#endif
+/* end FIH - 9801-680 */
 		dwc3_gadget_disconnect_interrupt(dwc);
 		dwc->dbg_gadget_events.disconnect++;
 		break;
 	case DWC3_DEVICE_EVENT_RESET:
+/* FIH - akckwang - 9801-680 - Dump typec sts register value */
+#if defined(CONFIG_FIH_9801) || defined(CONFIG_FIH_9802)
+		dev_err(dwc->dev, "%s:DWC3_DEVICE_EVENT_RESET\n", __func__);
+		dumpTypeCSts(dwc);
+#endif
+/* end FIH - 9801-680 */
 		dwc3_gadget_reset_interrupt(dwc);
 		dwc->dbg_gadget_events.reset++;
 		break;
 	case DWC3_DEVICE_EVENT_CONNECT_DONE:
+/* FIH - akckwang - 9801-680 - Dump typec sts register value */
+#if defined(CONFIG_FIH_9801) || defined(CONFIG_FIH_9802)
+		dev_err(dwc->dev, "%s:DWC3_DEVICE_EVENT_CONNECT_DONE\n", __func__);
+#endif
+/* end FIH - 9801-680 */
 		dwc3_gadget_conndone_interrupt(dwc);
 		dwc->dbg_gadget_events.connect++;
 		break;

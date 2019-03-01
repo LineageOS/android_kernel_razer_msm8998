@@ -882,8 +882,13 @@ static const struct reg_default wcd9335_defaults[] = {
 	{ WCD9335_EAR_STATUS_REG                        , 0x04 },
 	{ WCD9335_EAR_OUT_SHORT                         , 0x00 },
 	{ WCD9335_DIFF_LO_MISC                          , 0x03 },
+#if defined(CONFIG_FIH_9802)
+	{ WCD9335_DIFF_LO_LO2_COMPANDER                 , 0x04 },
+	{ WCD9335_DIFF_LO_LO1_COMPANDER                 , 0x04 },
+#else
 	{ WCD9335_DIFF_LO_LO2_COMPANDER                 , 0x00 },
 	{ WCD9335_DIFF_LO_LO1_COMPANDER                 , 0x00 },
+#endif
 	{ WCD9335_DIFF_LO_COMMON                        , 0x40 },
 	{ WCD9335_DIFF_LO_BYPASS_EN                     , 0x00 },
 	{ WCD9335_DIFF_LO_CNP                           , 0x20 },

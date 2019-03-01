@@ -859,10 +859,16 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 	 */
 	if (!cfg->old_state && !key_status) {
 		input_report_key(pon->pon_input, cfg->key_code, 1);
+#ifdef CONFIG_FIH_RESUME_PERFORMANCE_LOG
+		pr_info("PMIC input: code=%d, sts=1~\n", cfg->key_code);
+#endif
 		input_sync(pon->pon_input);
 	}
 
 	input_report_key(pon->pon_input, cfg->key_code, key_status);
+#ifdef CONFIG_FIH_RESUME_PERFORMANCE_LOG
+	pr_info("PMIC input: code=%d, sts=0x%hhx\n", cfg->key_code, pon_rt_sts);
+#endif
 	input_sync(pon->pon_input);
 
 	cfg->old_state = !!key_status;
@@ -1622,6 +1628,7 @@ static int qpnp_pon_config_init(struct qpnp_pon *pon)
 		}
 	}
 
+	dev_set_name(&pon->pdev->dev, "qpnp-power-on");
 	device_init_wakeup(&pon->pdev->dev, 1);
 
 	return rc;
@@ -1938,6 +1945,7 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 {
 	int rc;
 	int buf[2], reg;
+	char logs[80], str[40];
 
 	rc = regmap_read(pon->regmap,
 			QPNP_PON_OFF_REASON(pon),
@@ -1947,6 +1955,7 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 			rc);
 		return rc;
 	}
+	sprintf(str, "PON_POFF_REASON = 0x%x", reg);
 
 	if (reg & QPNP_GEN2_POFF_SEQ) {
 		rc = regmap_read(pon->regmap,
@@ -1959,6 +1968,7 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 		}
 		*reason = (u8)buf[0];
 		*reason_index_offset = 0;
+		snprintf(logs, sizeof(logs), "%s, POFF_REASON1 = 0x%x\n", str, *reason);
 	} else if (reg & QPNP_GEN2_FAULT_SEQ) {
 		rc = regmap_bulk_read(pon->regmap,
 				QPNP_FAULT_REASON1(pon),
@@ -1970,6 +1980,7 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 		}
 		*reason = (u8)buf[0] | (u16)(buf[1] << 8);
 		*reason_index_offset = POFF_REASON_FAULT_OFFSET;
+		snprintf(logs, sizeof(logs), "%s, FAULT_REASON = 0x%x\n", str, *reason);
 	} else if (reg & QPNP_GEN2_S3_RESET_SEQ) {
 		rc = regmap_read(pon->regmap,
 				QPNP_S3_RESET_REASON(pon),
@@ -1981,8 +1992,10 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 		}
 		*reason = (u8)buf[0];
 		*reason_index_offset = POFF_REASON_S3_RESET_OFFSET;
+		snprintf(logs, sizeof(logs), "%s, S3_RESET_REASON = 0x%x\n", str, *reason);
 	}
 
+	dev_info(&pon->pdev->dev, "PMIC@SID%d: Power-off reason register: %s\n", to_spmi_device(pon->pdev->dev.parent)->usid, logs);
 	return 0;
 }
 

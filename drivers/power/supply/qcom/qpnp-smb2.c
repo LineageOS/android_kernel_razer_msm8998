@@ -1,4 +1,6 @@
 /* Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018 Razer Inc.
+ * Copyright (c) 2018 Paranoid Android.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -123,6 +125,15 @@ static struct smb_params v1_params = {
 		.max_u	= 1575000,
 		.step_u	= 25000,
 	},
+	/* WayneWCShiue - 9801-468 - [BAT] Jeita temperature protection */
+	.jeita_fv_comp		= {
+		.name	= "jeita fv reduction",
+		.reg	= JEITA_FVCOMP_CFG_REG,
+		.min_u	= 0,
+		.max_u	= 475000,
+		.step_u	= 7500,
+	},
+	/* end 9801-468 */
 	.freq_buck		= {
 		.name	= "buck switching frequency",
 		.reg	= CFG_BUCKBOOST_FREQ_SELECT_BUCK_REG,
@@ -163,6 +174,10 @@ struct smb_dt_props {
 	int	wipower_max_uw;
 	int	min_freq_khz;
 	int	max_freq_khz;
+	/* WayneWCShiue - 9801-468 - [BAT] Jeita temperature protection */
+	int	jeita_fcc_comp;
+	int	jeita_fv_comp;
+	/* end 9801-468 */
 	struct	device_node *revid_dev_node;
 	int	float_option;
 	int	chg_inhibit_thr_mv;
@@ -196,6 +211,317 @@ module_param_named(
 #define BITE_WDOG_TIMEOUT_8S		0x3
 #define BARK_WDOG_TIMEOUT_MASK		GENMASK(3, 2)
 #define BARK_WDOG_TIMEOUT_SHIFT		2
+/* FIH - akckwang - 9801-506 - Create a node to on/off otg */
+#if defined(CONFIG_FIH_9801) || defined(CONFIG_FIH_9802)
+static struct smb2 *mChip = NULL;
+char fih_otg_disable_mode = 0; // FIHTDC, IdaChiang, add for OTG FREQ
+static ssize_t fih_otg_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	pr_info("fih_otg_show = %d\n", fih_otg_disable_mode);
+	return sprintf(buf, "%d\n", fih_otg_disable_mode);
+}
+
+static ssize_t fih_otg_store(struct device *dev,
+		struct device_attribute *attr, const char
+		*buf, size_t size)
+{
+	struct smb_charger *chg = &mChip->chg;
+	int intval =0;
+	int rc;
+	u8 stat;
+	int reg_enabled = -1;
+
+	sscanf(buf, "%d", &intval);
+
+	if(intval !=0 && intval !=1){
+		pr_info("%s:Invalid argument:%s\n", __func__, buf);
+		return -EINVAL;
+	}
+	fih_otg_disable_mode = intval;
+
+	reg_enabled = smblib_vbus_regulator_is_enabled(chg->vbus_vreg->rdev);
+	if(reg_enabled != 0 && reg_enabled != 1){
+		pr_err("%s:Can't get regulator status:%d\n", __func__, reg_enabled);
+		goto end;
+	}
+
+	if(intval == 1){
+		if(reg_enabled){
+			pr_info("%s:Disable otg\n", __func__);
+			smblib_vbus_regulator_disable(chg->vbus_vreg->rdev);
+		}
+		else{
+			pr_info("%s:Disable otg, but otg isn't enabled\n", __func__);
+		}
+	}
+	else{
+		rc = smblib_read(chg, TYPE_C_STATUS_2_REG, &stat);
+		if(rc < 0){
+			pr_err("%s:Couldn't read TYPE_C_STATUS_2 rc=%d\n", __func__, rc);
+			stat = 0;
+		}
+
+		if((stat & DFP_TYPEC_MASK) == DFP_RD_OPEN_BIT &&
+			(stat & EXIT_UFP_MODE_BIT) &&
+			!reg_enabled)
+		{
+			pr_info("%s:Enable otg\n", __func__);
+			smblib_vbus_regulator_enable(chg->vbus_vreg->rdev);
+		}
+		else{
+			pr_info("%s:Enable otg, but otg is not attached\n", __func__);
+		}
+	}
+
+end:
+	return size;
+}
+
+static DEVICE_ATTR(fih_otg_fun, 0644, fih_otg_show, fih_otg_store);
+#endif
+/* end FIH - 9801-506 */
+
+static void razer_charge_limit_disable_charge(struct smb_charger *chg, bool disable) {
+	int rc;
+
+	/* If current vote status equals the request, we don't need to do anything */
+	if (disable == chg->razer_charge_limit_active)
+		return;
+
+	/* Place or remove vote for usb icl */
+	rc = vote(chg->usb_icl_votable, RAZER_LIMIT_VOTER, disable, 0);
+	if (rc < 0)
+		goto error;
+
+	/* Place or remove vote for dc suspend */
+	rc = vote(chg->dc_suspend_votable, RAZER_LIMIT_VOTER, disable, 0);
+	if (rc < 0)
+		goto error;
+
+	/* Place or remove vote for sending a hardware signal to disable charging */
+	rc = vote(chg->chg_disable_votable, RAZER_LIMIT_VOTER, disable, 0);
+	if (rc < 0)
+		goto error;
+
+	/* If everything went fine, update the variable */
+	chg->razer_charge_limit_active = disable;
+
+	/* Notify batt_psy about this change */
+	power_supply_changed(chg->batt_psy);
+
+	pr_info("%s: Successfully %s charging.",
+		__func__, disable ? "disabled" : "enabled");
+
+	/* Return to avoid error path */
+	return;
+
+error:
+	pr_err("%s: Vote to %s charging as part of charge limit failed! rc=%d\n",
+		__func__, disable ? "disable" : "enable", rc);
+}
+
+void razer_charge_limit_update(struct smb_charger *chg) {
+	union power_supply_propval cur_pct = {0, };
+	int rc;
+
+	mutex_lock(&chg->razer_charge_limit_lock);
+
+	/* Remove votes if disabled or not connected */
+	if (!chg->razer_charge_limit_enable || chg->typec_mode == POWER_SUPPLY_TYPEC_NONE) {
+		razer_charge_limit_disable_charge(chg, false);
+		goto end;
+	}
+
+	/* Dropdown capacity cannot be higher than or identical to max limit capacity */
+	if (chg->razer_charge_limit_dropdown >= chg->razer_charge_limit_max) {
+		pr_err("%s: Charging limit configuration is not sane, disabling it.", __func__);
+		chg->razer_charge_limit_enable = false;
+		razer_charge_limit_disable_charge(chg, false);
+		goto end;
+	}
+
+	rc = smblib_get_prop_batt_capacity(chg, &cur_pct);
+	if (rc < 0) {
+		pr_err("%s: Failed to get battery capacity, aborting. rc=%d", __func__, rc);
+		goto end;
+	}
+
+	if (cur_pct.intval >= chg->razer_charge_limit_max) {
+		/* Disable charging if the current capacity is at max limit or higher */
+		razer_charge_limit_disable_charge(chg, true);
+	} else if (cur_pct.intval <= chg->razer_charge_limit_dropdown) {
+		/* Enable charging if we are at dropdown capacity or lower */
+		razer_charge_limit_disable_charge(chg, false);
+	}
+
+end:
+	mutex_unlock(&chg->razer_charge_limit_lock);
+}
+
+static ssize_t razer_charge_limit_enable_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct smb_charger *chg = &mChip->chg;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chg->razer_charge_limit_enable);
+}
+
+static ssize_t razer_charge_limit_enable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf,
+		size_t size)
+{
+	struct smb_charger *chg = &mChip->chg;
+	int intval;
+
+	if (sscanf(buf, "%d", &intval) < 1) {
+		pr_err("%s: sscanf failed to parse buffer.\n", __func__);
+		return -EINVAL;
+	}
+
+	if (intval != 0 && intval != 1) {
+		pr_err("%s: Invalid argument: %s\n", __func__, buf);
+		return -EINVAL;
+	}
+	chg->razer_charge_limit_enable = intval;
+
+	/* Update charge limit state for the new data */
+	razer_charge_limit_update(chg);
+
+	return size;
+}
+static DEVICE_ATTR(razer_charge_limit_enable, S_IRUGO | S_IWUSR,
+	razer_charge_limit_enable_show, razer_charge_limit_enable_store);
+
+static ssize_t razer_charge_limit_max_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct smb_charger *chg = &mChip->chg;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chg->razer_charge_limit_max);
+}
+
+#define RAZER_CHARGE_LIMIT_MAX_UPPER 99
+#define RAZER_CHARGE_LIMIT_MAX_LOWER 2
+static ssize_t razer_charge_limit_max_store(struct device *dev,
+		struct device_attribute *attr, const char *buf,
+		size_t size)
+{
+	struct smb_charger *chg = &mChip->chg;
+	int intval;
+
+	if (sscanf(buf, "%d", &intval) < 1) {
+		pr_err("%s: sscanf failed to parse buffer.\n", __func__);
+		return -EINVAL;
+	}
+
+	if (intval < RAZER_CHARGE_LIMIT_MAX_LOWER || intval > RAZER_CHARGE_LIMIT_MAX_UPPER) {
+		pr_err("%s: Invalid argument: %s\n", __func__, buf);
+		return -EINVAL;
+	}
+	chg->razer_charge_limit_max = intval;
+
+	/* Update charge limit state for the new data */
+	razer_charge_limit_update(chg);
+
+	return size;
+}
+static DEVICE_ATTR(razer_charge_limit_max, S_IRUGO | S_IWUSR,
+	razer_charge_limit_max_show, razer_charge_limit_max_store);
+
+static ssize_t razer_charge_limit_dropdown_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct smb_charger *chg = &mChip->chg;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chg->razer_charge_limit_dropdown);
+}
+
+#define RAZER_CHARGE_LIMIT_DROPDOWN_UPPER 98
+#define RAZER_CHARGE_LIMIT_DROPDOWN_LOWER 1
+static ssize_t razer_charge_limit_dropdown_store(struct device *dev,
+		struct device_attribute *attr, const char *buf,
+		size_t size)
+{
+	struct smb_charger *chg = &mChip->chg;
+	int intval;
+
+	if (sscanf(buf, "%d", &intval) < 1) {
+		pr_err("%s: sscanf failed to parse buffer.\n", __func__);
+		return -EINVAL;
+	}
+
+	if (intval < RAZER_CHARGE_LIMIT_DROPDOWN_LOWER || intval > RAZER_CHARGE_LIMIT_DROPDOWN_UPPER) {
+		pr_err("%s: Invalid argument: %s\n", __func__, buf);
+		return -EINVAL;
+	}
+	chg->razer_charge_limit_dropdown = intval;
+
+	/* Update charge limit state for the new data */
+	razer_charge_limit_update(chg);
+
+	return size;
+}
+static DEVICE_ATTR(razer_charge_limit_dropdown, S_IRUGO | S_IWUSR,
+	razer_charge_limit_dropdown_show, razer_charge_limit_dropdown_store);
+
+/* WayneWCShiue - 9801-6414 - Add battery event for problem report */
+static bool charging_current_too_low(struct smb_charger * chg, int cmp_current_ma)
+{
+	union power_supply_propval pval = {0, };
+	u8 stat = 0;
+	int rc;
+
+	smblib_get_prop_batt_status(chg, &pval);
+	if(pval.intval != POWER_SUPPLY_STATUS_CHARGING)
+		return false;
+
+	rc = smblib_read(chg, APSD_RESULT_STATUS_REG, &stat);
+	if(rc < 0 || (stat & (QC_2P0_BIT | QC_3P0_BIT)) == 0)
+		return false;
+
+	rc = smblib_get_prop_batt_capacity(chg, &pval);
+	if(rc < 0 || pval.intval >= 80)
+		return false;
+
+	rc = smblib_get_prop_system_temp_level(chg, &pval);
+	if(rc < 0 || pval.intval != 0)
+		return false;
+
+	rc = smblib_read(chg, BATTERY_CHARGER_STATUS_2_REG, &stat);
+	if(rc < 0 || (stat & (BAT_TEMP_STATUS_HOT_SOFT_LIMIT_BIT | BAT_TEMP_STATUS_COLD_SOFT_LIMIT_BIT
+		| BAT_TEMP_STATUS_TOO_HOT_BIT | BAT_TEMP_STATUS_TOO_COLD_BIT)))
+		return false;
+
+	rc = smblib_get_prop_batt_current_now(chg, &pval);
+	cmp_current_ma = (-1) * cmp_current_ma * 1000;
+	if(rc < 0 || pval.intval < cmp_current_ma)	// the charging current should be more than 1000 mA with QC2 or QC3 charger
+		return false;
+
+	return true;
+}
+
+static int collect_monitor_event(struct smb_charger * chg)
+{
+	union power_supply_propval pval = {0, };
+	int monitor_event = 0;
+
+	smblib_get_prop_batt_health(chg, &pval);
+
+	if (pval.intval == POWER_SUPPLY_HEALTH_COLD)
+		monitor_event |= 0x01;
+	else if (pval.intval == POWER_SUPPLY_HEALTH_OVERHEAT)
+		monitor_event |= 0x02;
+	else if (pval.intval == POWER_SUPPLY_HEALTH_OVERVOLTAGE)
+		monitor_event |= 0x04;
+
+	if(charging_current_too_low(chg, 1000))
+		return monitor_event |= 0x08;
+	else
+		return monitor_event;
+}
+/* end 9801-6414 */
+
 static int smb2_parse_dt(struct smb2 *chip)
 {
 	struct smb_charger *chg = &chip->chg;
@@ -320,6 +646,37 @@ static int smb2_parse_dt(struct smb2 *chip)
 	if (rc < 0)
 		chg->otg_delay_ms = OTG_DEFAULT_DEGLITCH_TIME_MS;
 
+	/* WayneWCShiue - 9801-468 - [BAT] Jeita temperature protection */
+	rc = of_property_read_u32(node, "qcom,jeita-fcc-comp",
+			&chip->dt.jeita_fcc_comp);
+	if (rc < 0) {
+		pr_err("fg-fcc-comp unavailable, rc:%d\n", rc);
+		chip->dt.jeita_fcc_comp = -EINVAL;
+	}
+
+	rc = of_property_read_u32(node, "qcom,jeita-fv-comp",
+			&chip->dt.jeita_fv_comp);
+	if (rc < 0) {
+		pr_err("fg-fcc-comp unavailable, rc:%d\n", rc);
+		chip->dt.jeita_fv_comp = -EINVAL;
+	}
+	/* end 9801-468 */
+
+	/* WayneWCShiue - 9802-799 - Implement the WLC FCC adjust mechansim */
+	chg->fih_wlc_fcc_en = of_property_read_bool(node, "fih,wlc-fcc-en");
+	/* end 9802-799 */
+
+	/* WayneWCShiue - 9801-1665 - Add FIH abnormal charging current check mechanism */
+	chg->fih_chg_abnormal_check_en = of_property_read_bool(node, "fih,chg-abnormal-check-en");
+	if(chg->fih_chg_abnormal_check_en == true) {
+		chg->fih_reEnable_max_limit = 0;
+	}
+	/* end 9801-1665 */
+
+	/* WayneWCShiue - 9801-3293 - Show battery info */
+	chg->show_batt_info_en = of_property_read_bool(node, "fih,show-batt-info-en");
+	/* end 9801-3293 */
+
 	return 0;
 }
 
@@ -379,8 +736,10 @@ static int smb2_usb_get_prop(struct power_supply *psy,
 			val->intval = 0;
 		else
 			val->intval = 1;
+		//{Fix the DUT showed "Charging on AC" and then showed "Charging over USB
 		if (chg->real_charger_type == POWER_SUPPLY_TYPE_UNKNOWN)
 			val->intval = 0;
+		//}Fix the DUT showed "Charging on AC" and then showed "Charging over USB
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		rc = smblib_get_prop_usb_voltage_max(chg, val);
@@ -392,7 +751,11 @@ static int smb2_usb_get_prop(struct power_supply *psy,
 		val->intval = get_client_vote(chg->usb_icl_votable, PD_VOTER);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		rc = smblib_get_prop_input_current_settled(chg, val);
+		//{Lock screen does not indicate charging speed, it shows "Charging" instead of "Charging slowly" or "Charging quickly" in all cases. This is not the expected behaviour.
+		//Qcom resolve way different with us.
+		//rc = smblib_get_prop_input_current_settled(chg, val);
+		rc = smblib_get_charge_current(chg, &val->intval);
+		//}Lock screen does not indicate charging speed, it shows "Charging" instead of "Charging slowly" or "Charging quickly" in all cases. This is not the expected behaviour.
 		break;
 	case POWER_SUPPLY_PROP_TYPE:
 		val->intval = POWER_SUPPLY_TYPE_USB_PD;
@@ -404,6 +767,11 @@ static int smb2_usb_get_prop(struct power_supply *psy,
 			val->intval = chg->real_charger_type;
 		break;
 	case POWER_SUPPLY_PROP_TYPEC_MODE:
+/* FIH - akckwang - 9801-680 - Dump typec sts register value */
+#if 0
+		smblib_dump_typec_sts(chg, val);
+#endif
+/* end FIH - 9801-680 */
 		if (chg->micro_usb_mode)
 			val->intval = POWER_SUPPLY_TYPEC_NONE;
 		else if (chip->bad_part)
@@ -543,6 +911,7 @@ static int smb2_usb_prop_is_writeable(struct power_supply *psy,
 {
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CTM_CURRENT_MAX:
+//DY-FixPostCSBuildFail        case POWER_SUPPLY_PROP_CURRENT_MAX:
 		return 1;
 	default:
 		break;
@@ -583,8 +952,10 @@ static int smb2_init_usb_psy(struct smb2 *chip)
 static enum power_supply_property smb2_usb_port_props[] = {
 	POWER_SUPPLY_PROP_TYPE,
 	POWER_SUPPLY_PROP_ONLINE,
+	//{Lock screen does not indicate charging speed, it shows "Charging" instead of "Charging slowly" or "Charging quickly" in all cases. This is not the expected behaviour.
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
+	//}Lock screen does not indicate charging speed, it shows "Charging" instead of "Charging slowly" or "Charging quickly" in all cases. This is not the expected behaviour.
 };
 
 static int smb2_usb_port_get_prop(struct power_supply *psy,
@@ -611,12 +982,17 @@ static int smb2_usb_port_get_prop(struct power_supply *psy,
 		else
 			val->intval = 0;
 		break;
+	//{Lock screen does not indicate charging speed, it shows "Charging" instead of "Charging slowly" or "Charging quickly" in all cases. This is not the expected behaviour.
+	//Qcom resolve way different with us, TBD.
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
-		val->intval = 5000000;
+		//val->intval = 5000000;
+		val->intval = chg->voltage_max_uv;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		rc = smblib_get_prop_input_current_settled(chg, val);
+		//rc = smblib_get_prop_input_current_settled(chg, val);
+		rc = smblib_get_charge_current(chg, &val->intval);
 		break;
+	//}Lock screen does not indicate charging speed, it shows "Charging" instead of "Charging slowly" or "Charging quickly" in all cases. This is not the expected behaviour.
 	default:
 		pr_err_ratelimited("Get prop %d is not supported in pc_port\n",
 				psp);
@@ -903,6 +1279,7 @@ static int smb2_init_dc_psy(struct smb2 *chip)
 static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_INPUT_SUSPEND,
 	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_STATUS_INTERNAL, //Device was discharging when battery capacity is above 60% and temperature is warm.
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
@@ -928,6 +1305,18 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_RERUN_AICL,
 	POWER_SUPPLY_PROP_DP_DM,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
+	/* WayneWCShiue - 9802-799 - Implement the WLC FCC adjust mechansim */
+	POWER_SUPPLY_PROP_FIH_WLC_FCC_EN,
+	/* end 9802-799 */
+	/* WayneWCShiue - 9801-8555 - [BAT] Inform Battery Protect AP once the battery can only charge to 4.1V */
+	POWER_SUPPLY_PROP_JEITA_FULL_CAPACITY_STATUS,
+	/* end 9801-8555 */
+	/* WayneWCShiue - 9801-62 - [FTM] Supprt FTM command */
+	POWER_SUPPLY_PROP_INPUT_CURRENT_MAX,
+	/* end 9801-62 */
+	/* WayneWCShiue - 9801-6414 - Add battery event for problem report */
+	POWER_SUPPLY_PROP_MONITOR_EVENT,
+	/* end 9801-6414 */
 };
 
 static int smb2_batt_get_prop(struct power_supply *psy,
@@ -937,9 +1326,62 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	struct smb_charger *chg = power_supply_get_drvdata(psy);
 	int rc = 0;
 	union power_supply_propval pval = {0, };
+	union power_supply_propval test_capacity = {0, };	//The battery status show Full when battery capacity 100%.
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
+		//{Device was discharging when battery capacity is above 60% and temperature is warm.
+		rc = smblib_get_prop_batt_status(chg, val);
+		if (rc < 0)
+			break;
+
+		//{The battery status show Full when battery capacity 100%.
+		rc = smblib_get_prop_batt_capacity(chg, &test_capacity);
+		if (rc < 0)
+			break;
+
+		if (val->intval == POWER_SUPPLY_STATUS_CHARGING && test_capacity.intval == 100) {
+			val->intval = POWER_SUPPLY_STATUS_FULL;
+			break;
+		}
+		//}The battery status show Full when battery capacity 100%.
+
+		/* When we force charging to be disabled, still report status as charging to userspace
+		if (chg->razer_charge_limit_active && (val->intval == POWER_SUPPLY_STATUS_NOT_CHARGING
+			|| val->intval == POWER_SUPPLY_STATUS_DISCHARGING)) {
+			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+			break;
+		} */
+
+		if (val->intval == POWER_SUPPLY_STATUS_FULL ||
+			val->intval == POWER_SUPPLY_STATUS_NOT_CHARGING)
+		{
+			union power_supply_propval pval_health = {0, };
+			union power_supply_propval pval_temp = {0, };
+			union power_supply_propval pval_usb = {0, };
+			union power_supply_propval pval_dc = {0, };
+			union power_supply_propval pval_capacity = {0, };
+			union power_supply_propval pval_is = {0, };
+
+			rc |= smblib_get_prop_batt_health(chg, &pval_health);
+			rc |= smblib_get_prop_batt_temp(chg, &pval_temp);
+			rc |= smblib_get_prop_usb_present(chg, &pval_usb);
+			rc |= smblib_get_prop_dc_present(chg, &pval_dc);
+			rc |= smblib_get_prop_batt_capacity(chg, &pval_capacity);
+			rc |= smblib_get_prop_input_suspend(chg, &pval_is);
+
+			//if (pval_temp.intval >= 430 && pval_is.intval == 0  &&
+			if (pval_health.intval == POWER_SUPPLY_HEALTH_WARM && pval_is.intval == 0  &&
+				pval_capacity.intval < 95 && pval_capacity.intval > 60 &&
+				(pval_usb.intval == 1 || pval_dc.intval == 1))
+			{
+				pr_info("Change status to charging.  TEMP=%d HEALTH=%d IS=%d USB=%d DC=%d CAP=%d\n", pval_temp.intval, pval_health.intval, pval_is.intval, pval_usb.intval, pval_dc.intval, pval_capacity.intval);
+				val->intval = POWER_SUPPLY_STATUS_CHARGING;
+			}
+		}
+		break;
+	case POWER_SUPPLY_PROP_STATUS_INTERNAL:
+		//}Device was discharging when battery capacity is above 60% and temperature is warm.
 		rc = smblib_get_prop_batt_status(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
@@ -1036,6 +1478,26 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
 		rc = smblib_get_prop_batt_charge_counter(chg, val);
 		break;
+	/* WayneWCShiue - 9802-799 - Implement the WLC FCC adjust mechansim */
+	case POWER_SUPPLY_PROP_FIH_WLC_FCC_EN:
+		val->intval = chg->fih_wlc_fcc_en;
+		break;
+	/* end 9802-799 */
+	/* WayneWCShiue - 9801-8555 - [BAT] Inform Battery Protect AP once the battery can only charge to 4.1V */
+	case POWER_SUPPLY_PROP_JEITA_FULL_CAPACITY_STATUS:
+		val->intval = FIH_check_chg_status(chg);
+		break;
+	/* end 9801-8555 */
+	/* WayneWCShiue - 9801-62 - [FTM] Supprt FTM command */
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_MAX:
+		val->intval = get_effective_result(chg->usb_icl_votable);
+		break;
+	/* end 9801-62 */
+	/* WayneWCShiue - 9801-6414 - Add battery event for problem report */
+	case POWER_SUPPLY_PROP_MONITOR_EVENT:
+		val->intval = collect_monitor_event(chg);
+		break;
+	/* end 9801-6414 */
 	default:
 		pr_err("batt power supply prop %d not supported\n", psp);
 		return -EINVAL;
@@ -1054,16 +1516,43 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 		const union power_supply_propval *val)
 {
 	int rc = 0;
+	/* WayneWCShiue - 9801-5978 - open a back door to modify register */
+	u8 value = 0;
+	u8 mask = 0;
+	u16 address = 0;
+	/* end 9801-5978 */
 	struct smb_charger *chg = power_supply_get_drvdata(psy);
+	/* WayneWCShiue - 9801-3730 - Change JEITA dynamically */
+	struct smb2 *chip = power_supply_get_drvdata(psy);
+	/* end 9801-3730 */
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
+		pr_debug("[BAT] INPUT_SUSPEND been set to %d", val->intval);
 		rc = smblib_set_prop_input_suspend(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 		rc = smblib_set_prop_system_temp_level(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
+		/* WayneWCShiue - 9801-4573 - Open a back door to disable safety timer */
+		if(val->intval == 95277259) {
+			pr_err("Force to disable safety timer for QA testing\n");
+			smblib_masked_write(chg, 0x10A0, GENMASK(1, 0), 0);
+			break;
+		}
+		/* end 9801-4573 */
+
+		/* WayneWCShiue - 9801-5978 - open a back door to modify register */
+		if(val->intval > 100 && val->intval != 95277259) {
+			address = (val->intval >> 16) & 0x0000FFFF;
+			value = ((val->intval & 0x0000FF00) >> 8);
+			mask = (val->intval & 0x000000FF);
+			smblib_masked_write(chg, address, mask, value);
+			break;
+		}
+		/* end 9801-5978 */
+
 		rc = smblib_set_prop_batt_capacity(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_PARALLEL_DISABLE:
@@ -1077,14 +1566,8 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 		rc = smblib_set_prop_charge_qnovo_enable(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_QNOVO:
-		if (val->intval == -EINVAL) {
-			vote(chg->fv_votable, BATT_PROFILE_VOTER,
-					true, chg->batt_profile_fv_uv);
-			vote(chg->fv_votable, QNOVO_VOTER, false, 0);
-		} else {
-			vote(chg->fv_votable, QNOVO_VOTER, true, val->intval);
-			vote(chg->fv_votable, BATT_PROFILE_VOTER, false, 0);
-		}
+		vote(chg->fv_votable, QNOVO_VOTER,
+			(val->intval >= 0), val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_QNOVO:
 		vote(chg->pl_disable_votable, PL_QNOVO_VOTER,
@@ -1130,6 +1613,73 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED:
 		rc = smblib_set_prop_input_current_limited(chg, val);
 		break;
+	/* WayneWCShiue - 9801-3730 - Change JEITA dynamically */
+	case POWER_SUPPLY_PROP_JEITA_DIFF_FN_EN:
+		chg->diff_jeita_fn_en = (val->intval == 1) ? true : false;
+		pr_err("Wayne: chg->diff_jeita_fn_en = %d\n", val->intval);
+		FIH_adjust_JEITA(chg);
+		break;
+	case POWER_SUPPLY_PROP_JEITA_FCC_COOL:
+		if(val->intval < 0)
+			chg->jeita_fcc_comp_cool = chip->dt.jeita_fcc_comp;
+		else
+			chg->jeita_fcc_comp_cool = val->intval;
+		pr_debug("chg->jeita_fcc_comp_cool = %d\n", chg->jeita_fcc_comp_cool);
+		break;
+	case POWER_SUPPLY_PROP_JEITA_FCC_WARM:
+		if(val->intval < 0)
+			chg->jeita_fcc_comp_warm = chip->dt.jeita_fcc_comp;
+		else
+			chg->jeita_fcc_comp_warm = val->intval;
+		pr_debug("chg->jeita_fcc_comp_warm = %d\n", chg->jeita_fcc_comp_warm);
+		break;
+	case POWER_SUPPLY_PROP_JEITA_FV_COOL:
+		if(val->intval < 0)
+			chg->jeita_fv_comp_cool = chip->dt.jeita_fv_comp;
+		else
+			chg->jeita_fv_comp_cool = val->intval;
+		pr_debug("chg->jeita_fv_comp_cool = %d\n", chg->jeita_fv_comp_cool);
+		break;
+	case POWER_SUPPLY_PROP_JEITA_FV_WARM:
+		if(val->intval < 0)
+			chg->jeita_fv_comp_warm = chip->dt.jeita_fv_comp;
+		else
+			chg->jeita_fv_comp_warm = val->intval;
+		pr_debug("chg->jeita_fv_comp_warm = %d\n", chg->jeita_fv_comp_warm);
+		break;
+	/* end 9801-3730 */
+	/* WayneWCShiue - 9801-8555 - [BAT] Inform Battery Protect AP once the battery can only charge to 4.1V */
+	case POWER_SUPPLY_PROP_JEITA_FULL_CAPACITY_WARM_EN:
+		if(val->intval == 1)
+			chg->fih_jeita_full_capacity_warm_en = true;
+		 else
+			chg->fih_jeita_full_capacity_warm_en = false;
+		pr_debug("fih_jeita_full_capacity_warm_en = %s\n", val->intval == 1 ? "true" : "false");
+		break;
+	case POWER_SUPPLY_PROP_JEITA_FULL_CAPACITY_COOL_EN:
+		if(val->intval == 1)
+			chg->fih_jeita_full_capacity_cool_en = true;
+		 else
+			chg->fih_jeita_full_capacity_cool_en = false;
+		pr_debug("fih_jeita_full_capacity_cool_en = %s\n", val->intval == 1 ? "true" : "false");
+		break;
+	/* end 9801-8555 */
+	/* WayneWCShiue - 9802-1713 - Add periodical checker mechanism for charging */
+	case POWER_SUPPLY_PROP_FIH_PERIOD_CHECKER:
+		FIH_adjust_JEITA(chg);
+		FIH_soft_JEITA_recharge_check(chg);
+		FIH_chg_abnormal_check(chg);
+	break;
+	/* end 9802-1713 */
+	/* WayneWCShiue - 9801-62 - [FTM] Supprt FTM command */
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_MAX:
+		/* Use icl function to instead of vote mechanism, because the new icl vote_callback cannot allow to set the icl which is smaller than aicl_result */
+		smblib_set_icl_current(chg, val->intval);
+
+		/* Disable THERMAL_DAEMON_VOTER, only let DEFAULT_VOTER has the ability to change FCC */
+		vote(chg->fcc_votable, THERMAL_DAEMON_VOTER, false, 0);
+		break;
+	/* end 9801-62 */
 	default:
 		rc = -EINVAL;
 	}
@@ -1150,6 +1700,10 @@ static int smb2_batt_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED:
 	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
 	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
+	/* WayneWCShiue - 9801-62 - [FTM] Supprt FTM command */
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_MAX:
+	/* end 9801-62 */
 		return 1;
 	default:
 		break;
@@ -1501,6 +2055,18 @@ static int smb2_init_hw(struct smb2 *chip)
 		return rc;
 	}
 
+	/* WayneWCShiue - 9801-468 - [BAT] Jeita temperature protection */
+	if (chip->dt.jeita_fcc_comp < 0)
+		smblib_get_charge_param(chg, &chg->param.jeita_cc_comp,
+					&chip->dt.jeita_fcc_comp);
+
+	if (chip->dt.jeita_fv_comp < 0)
+		smblib_get_charge_param(chg, &chg->param.jeita_fv_comp,
+					&chip->dt.jeita_fv_comp);
+	/* end 9801-468 */
+
+	/* DY-FixMergeConflict chg->otg_cl_ua = chip->dt.otg_cl_ua; */
+	/* DY-FixMergeConflict chg->dcp_icl_ua = chip->dt.usb_icl_ua; */
 	chg->boost_threshold_ua = chip->dt.boost_threshold_ua;
 
 	rc = smblib_read(chg, APSD_RESULT_STATUS_REG, &stat);
@@ -1549,12 +2115,24 @@ static int smb2_init_hw(struct smb2 *chip)
 	 * start from min and AICL ADC disable
 	 */
 	rc = smblib_masked_write(chg, USBIN_AICL_OPTIONS_CFG_REG,
-			USBIN_AICL_START_AT_MAX_BIT
-				| USBIN_AICL_ADC_EN_BIT, 0);
+	/* WayneWCShiue - 9801-3086 - Enable AICL re-run */
+			USBIN_AICL_START_AT_MAX_BIT | USBIN_AICL_RERUN_EN_BIT
+				| USBIN_AICL_ADC_EN_BIT, USBIN_AICL_RERUN_EN_BIT);
+	/* end 9801-3086 */
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't configure AICL rc=%d\n", rc);
 		return rc;
 	}
+
+	//{Fixed charging stopped abnormally
+	/* WayneWCShiue - 9801-3086 - Enable AICL re-run */
+	rc = smblib_masked_write(chg, AICL_RERUN_TIME_CFG_REG,
+			AICL_RERUN_TIME_MASK,  0x1);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't configure AICL rerun timer rc=%d\n", rc);
+	}
+	/* end 9801-3086 */
+	//}Fixed charging stopped abnormally
 
 	/* Configure charge enable for software control; active high */
 	rc = smblib_masked_write(chg, CHGR_CFG2_REG,
@@ -1672,6 +2250,26 @@ static int smb2_init_hw(struct smb2 *chip)
 		rc = 0;
 		break;
 	}
+
+//@TEST_ :
+#ifdef CONFIG_FIH_9802
+	rc = smblib_masked_write(chg, USBIN_OPTIONS_2_CFG_REG, 0x20, 0);
+#endif
+//@_TEST :
+
+	/* WayneWCShiue - 9801-468 - [BAT] Jeita temperature protection */
+	rc = smblib_set_charge_param(chg, &chg->param.jeita_cc_comp, chip->dt.jeita_fcc_comp);
+	if (rc < 0) {
+		pr_err("Wayne: Couldn't configure jeita fcc comp rc = %d\n", rc);
+		return rc;
+	}
+
+	rc = smblib_set_charge_param(chg, &chg->param.jeita_fv_comp, chip->dt.jeita_fv_comp);
+	if (rc < 0) {
+		pr_err("Wayne: Couldn't configure jeita fv comp rc = %d\n", rc);
+		return rc;
+	}
+	/* end 9801-468 */
 
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't configure float charger options rc=%d\n",
@@ -1855,7 +2453,7 @@ static int smb2_determine_initial_status(struct smb2 *chip)
 	smblib_handle_usb_source_change(0, &irq_data);
 	smblib_handle_chg_state_change(0, &irq_data);
 	smblib_handle_icl_change(0, &irq_data);
-	smblib_handle_batt_temp_changed(0, &irq_data);
+	smblib_handle_batt_temp_changed(0, &irq_data); //Device was discharging when battery capacity is above 60% and temperature is warm.
 	smblib_handle_wdog_bark(0, &irq_data);
 
 	return 0;
@@ -1909,7 +2507,9 @@ static struct smb_irq_info smb2_irqs[] = {
 	[BATT_TEMP_IRQ] = {
 		.name		= "bat-temp",
 		.handler	= smblib_handle_batt_temp_changed,
+		/* WayneWCShiue - 9801-7789 - bat-temp need to wakeup system, and change JEITA setting */
 		.wake		= true,
+		/* end 9801-7789 */
 	},
 	[BATT_OCP_IRQ] = {
 		.name		= "bat-ocp",
@@ -2219,6 +2819,9 @@ static int smb2_probe(struct platform_device *pdev)
 	int rc = 0;
 	union power_supply_propval val;
 	int usb_present, batt_present, batt_health, batt_charge_type;
+	#ifdef BBS_LOG
+	u8 stat = 0;
+	#endif
 
 	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
@@ -2376,11 +2979,58 @@ static int smb2_probe(struct platform_device *pdev)
 	}
 	batt_charge_type = val.intval;
 
+	dev_set_name(chg->dev, "qpnp-smb2");
 	device_init_wakeup(chg->dev, true);
 
 	pr_info("QPNP SMB2 probed successfully usb:present=%d type=%d batt:present = %d health = %d charge = %d\n",
 		usb_present, chg->real_charger_type,
 		batt_present, batt_health, batt_charge_type);
+	/* WayneWCShiue - 9801-61 - [BAT] Workaround for DUT cannot be charged with pmi8998 v2 */
+	#ifdef CONFIG_FIH_9801
+	rc = smblib_masked_write(chg, THERMREG_SRC_CFG_REG,
+	THERMREG_SKIN_ADC_SRC_EN_BIT,
+	0);
+	if (rc < 0) {
+		pr_err("Couldn't configure THERMREG_SRC_CFG_REG rc=%d\n", rc);
+		return rc;
+	}
+	#endif
+	/* end 9801-61 */
+
+	#ifdef BBS_LOG
+	rc = smblib_read(chg, 0x8C8, &stat);
+	if (rc < 0) {
+		pr_err("Couldn't read UVLO state rc=%d\n", rc);
+	} else {
+		if(stat & BIT(6))
+			printk("BBox::UEC;49::0\n");
+	}
+	#endif
+
+/* FIH - SimonSSChang - Disable QC Wi-Power config */
+#if defined(CONFIG_FIH_9802)
+	/* AICL configuration */
+	smblib_write(chg, DCIN_AICL_OPTIONS_CFG_REG, 0x7C);
+	/* Lower AICL collapse threshold */
+	smblib_write(chg, DCIN_AICL_REF_SEL_CFG_REG, 0x02);
+	/* Disable Wi-Power */
+	smblib_write(chg, WI_PWR_OPTIONS_REG, 0x00);
+	printk(KERN_INFO "Disable Wi-Power option\n");
+#endif
+/* end FIH */
+
+/* FIH - akckwang - 9801-506 - Create a node to on/off otg */
+#if defined(CONFIG_FIH_9801) || defined(CONFIG_FIH_9802)
+	device_create_file(&pdev->dev, &dev_attr_fih_otg_fun); // FIHTDC, IdaChiang, add for FREQ
+	mChip = chip;
+#endif
+/* end FIH - 9801-506 */
+
+	device_create_file(&pdev->dev, &dev_attr_razer_charge_limit_enable);
+	device_create_file(&pdev->dev, &dev_attr_razer_charge_limit_max);
+	device_create_file(&pdev->dev, &dev_attr_razer_charge_limit_dropdown);
+
+	pr_info("QPNP SMB2 probed successfully\n");
 	return rc;
 
 cleanup:

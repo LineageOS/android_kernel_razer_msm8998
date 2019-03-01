@@ -1,0 +1,176 @@
+menu "Device Drivers for FIH"
+
+  config FIH_9801
+  	bool "FIH 9801 project"
+  	default n
+  	help
+  	  support fih 9801 project
+
+  config FIH_9802
+  	bool "FIH 9802 project"
+  	default n
+  	help
+  	  support fih 9802 project
+
+  config FIH_RCL
+  	bool "FIH RCL project"
+  	default n
+  	help
+  	  support fih RCL project
+
+  config FIH_UNUSEGPIO
+       bool "fih gpio"
+       default y
+       help
+		support fih gpio function
+
+  config FIH_APR
+           bool "fih apr"
+           default n
+           help
+             support fih apr virtual file
+
+  config FIH_DISABLE_REBOOT_EDL
+           bool "fih disable reboot edl command"
+           default n
+           help
+             support fih disable reboot edl command
+
+  config FIH_NVRF
+	  bool "fih rf nv"
+	  default n
+	  help
+	    support fih rf nv virtual file
+
+  config FIH_NVCUST
+	  bool "fih cust nv"
+	  default n
+	  help
+	    support fih cust nv virtual file
+
+  config FIH_SECBOOT
+	  bool "fih secboot"
+	  default n
+	  help
+	    support fih secboot virtual file
+
+  config FIH_FVER
+	  bool "fih fver"
+	  default n
+	  help
+	    support fih fver virtual file
+
+  config FIH_INFO
+	  bool "fih info"
+	  default n
+	  help
+	    support fih information virtual file
+
+  config FIH_E2P
+	  bool "fih e2p"
+	  default n
+	  help
+	    support fih e2p virtual file
+
+  config FIH_CPU
+	  bool "fih cpu"
+	  default n
+	  help
+	    support fih cpu info virtual file
+
+  config FIH_DRAM
+	  bool "fih DRAM"
+	  default n
+	  help
+	    support fih DRAM info virtual file
+
+  config FIH_DDRTEST
+	  bool "fih DDR test"
+	  default n
+	  help
+	    support fih DDR TEST virtual file
+
+  config FIH_SUT
+	  bool "fih sut"
+	  default n
+	  help
+	    support fih sut info virtual file
+
+  config FIH_HWID
+	  bool "fih hwid"
+	  default n
+	  help
+	    support fih hwid module
+
+  config FIH_CDA
+	  bool "fih cda"
+	  default n
+	  help
+	    support fih cda info virtual file
+
+  config FIH_DLOAD
+           bool "fih download mode by bset enable"
+           default n
+           help
+             support fih download mode by bset enable
+
+  config FIH_UFSINFO
+	  bool "fih ufs info"
+	  default n
+	  help
+	    support fih ufs info virtual fil
+
+        menuconfig FIH_DEBUG
+            bool "FIH DEBUG"
+            default n
+            help
+                Turn on this group to enable FIH's DEBUG configurations menu
+
+        if FIH_DEBUG
+
+            config FIH_RESUME_PERFORMANCE_LOG
+                bool "FIH LOG about resume performance"
+                default n
+                ---help---
+                    Enable resume performance log
+
+            config FIH_DUMP_WAKELOCK
+                bool "FIH DUMP WAKELOCK"
+                depends on PM_SLEEP
+                default n
+                ---help---
+                    Enable to dump wakelock periodically if it active.
+
+            config FIH_CPU_USAGE
+                bool "fih cpu usage information"
+                default n
+                ---help---
+                    Support fih cpu usage information
+
+            config FIH_BLOG
+                bool "fih bootloader log dump"
+                default n
+                ---help---
+                    Support fih bootloader log dump
+
+        endif
+
+  config FIH_MFR
+  	bool "fih mfr"
+  	default n
+  	help
+  	  support fih modem failure reason virtual file
+
+config FIH_HALL_SENSOR
+	bool "FIH HALL Sensor"
+	default n
+	help
+	  support FIH HALL Sensor
+
+config FIH_USB
+  bool "FIH USB Driver"
+  default n
+  help
+    support FIH USB Driver
+
+endmenu

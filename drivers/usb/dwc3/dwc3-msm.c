@@ -256,6 +256,24 @@ struct dwc3_msm {
 static void dwc3_pwr_event_handler(struct dwc3_msm *mdwc);
 static int dwc3_msm_gadget_vbus_draw(struct dwc3_msm *mdwc, unsigned mA);
 
+/* FIH - akckwang - 9801-680 - Dump typec sts register value */
+#if defined(CONFIG_FIH_9801) || defined(CONFIG_FIH_9802)
+int dumpTypeCSts(struct dwc3 *dwc)
+{
+	union power_supply_propval pval = {0};
+	struct power_supply	*usb_psy;
+	dev_err(dwc->dev, "%s:\n", __func__);
+	usb_psy = power_supply_get_by_name("usb");
+	if(!usb_psy){
+		dev_err(dwc->dev, "%s:can't find usb_psy\n", __func__);
+		return -ENODEV;
+	}
+	power_supply_get_property(usb_psy, POWER_SUPPLY_PROP_TYPEC_MODE, &pval);
+
+	return 0;
+}
+#endif
+/* end FIH - 9801-680 */
 /**
  *
  * Read register with debug info.
@@ -1595,7 +1613,7 @@ static int msm_dwc3_usbdev_notify(struct notifier_block *self,
 	}
 
 	mdwc->hc_died = true;
-	schedule_delayed_work(&mdwc->sm_work, 0);
+	queue_delayed_work(system_freezable_wq, &mdwc->sm_work, 0);
 	return 0;
 }
 
@@ -2352,7 +2370,7 @@ static void dwc3_ext_event_notify(struct dwc3_msm *mdwc)
 		clear_bit(B_SUSPEND, &mdwc->inputs);
 	}
 
-	schedule_delayed_work(&mdwc->sm_work, 0);
+	queue_delayed_work(system_freezable_wq, &mdwc->sm_work, 0);
 }
 
 static void dwc3_resume_work(struct work_struct *w)
@@ -3242,7 +3260,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		dwc3_msm_id_notifier(&mdwc->id_nb, true, mdwc->extcon_id);
 	else if (!pval.intval) {
 		/* USB cable is not connected */
-		schedule_delayed_work(&mdwc->sm_work, 0);
+		queue_delayed_work(system_freezable_wq, &mdwc->sm_work, 0);
 	} else {
 		if (pval.intval > 0)
 			dev_info(mdwc->dev, "charger detection in progress\n");
@@ -3962,7 +3980,7 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 	}
 
 	if (work)
-		schedule_delayed_work(&mdwc->sm_work, delay);
+		queue_delayed_work(system_freezable_wq, &mdwc->sm_work, delay);
 
 ret:
 	return;

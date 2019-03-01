@@ -57,6 +57,11 @@
  * TZ 3.X version info
  */
 #define QSEE_VERSION_TZ_3_X 0x800000
+
+#define TZBSP_AES_256_ENCRYPTED_KEY_SIZE 256
+#define TZBSP_NONCE_LEN 12
+#define TZBSP_TAG_LEN 16
+
 /*
  * TZ 4.X version info
  */

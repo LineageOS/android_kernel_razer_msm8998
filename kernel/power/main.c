@@ -26,6 +26,27 @@ DEFINE_MUTEX(pm_mutex);
 
 static BLOCKING_NOTIFIER_HEAD(pm_chain_head);
 
+#ifdef CONFIG_FIH_DUMP_WAKELOCK
+static void getPMSWakeLockInfo(char* name, char **pid, char **tag)
+{
+	// parse wakelock name field
+	while (*name && *name!='^')
+		name++;
+	if (*name) *name++='\0';
+
+	// parse pid field
+	*pid=name;
+	while (*name && *name!='^')
+		name++;
+	if (*name) *name++='\0';
+
+	// parse tag field
+	*tag=name;
+	while (*name && *name!='^')
+		name++;
+	if (*name) *name++='\0';
+}
+#endif
 int register_pm_notifier(struct notifier_block *nb)
 {
 	return blocking_notifier_chain_register(&pm_chain_head, nb);
@@ -500,11 +521,26 @@ static ssize_t wake_lock_show(struct kobject *kobj,
 	return pm_show_wakelocks(buf, true);
 }
 
+#ifdef CONFIG_FIH_DUMP_WAKELOCK
+extern void pms_add_wakelock_info(char *pid, char *tag);
+extern void pms_remove_wakelock_info(char *pid, char *tag);
+#endif
 static ssize_t wake_lock_store(struct kobject *kobj,
 			       struct kobj_attribute *attr,
 			       const char *buf, size_t n)
 {
-	int error = pm_wake_lock(buf);
+	int error = 0;
+	#ifdef CONFIG_FIH_DUMP_WAKELOCK
+	char *pid = NULL;
+	char *tag = NULL;
+
+	if (!strncmp(buf,"PMS^",4)) {
+		getPMSWakeLockInfo((char *)buf, &pid, &tag);
+		pms_add_wakelock_info(pid, tag);
+		return n;
+	}
+	#endif
+	error = pm_wake_lock(buf);
 	return error ? error : n;
 }
 
@@ -521,7 +557,18 @@ static ssize_t wake_unlock_store(struct kobject *kobj,
 				 struct kobj_attribute *attr,
 				 const char *buf, size_t n)
 {
-	int error = pm_wake_unlock(buf);
+	int error = 0;
+	#ifdef CONFIG_FIH_DUMP_WAKELOCK
+	char *pid = NULL;
+	char *tag = NULL;
+
+	if (!strncmp(buf,"PMS^",4)) {
+		getPMSWakeLockInfo((char *)buf, &pid, &tag);
+		pms_remove_wakelock_info(pid, tag);
+		return n;
+	}
+	#endif
+	error = pm_wake_unlock(buf);
 	return error ? error : n;
 }
 

@@ -1,0 +1,160 @@
+/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&mdss_mdp {
+	lgd_wqxga_dualdsi_cmd: qcom,mdss_dsi_lgd_wqxga_dualmipi_cmd {
+		qcom,mdss-dsi-panel-name =
+			"LGD Dual DSI cmd mode panel without DSC";
+		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-panel-framerate = <60>;
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		fih,panel-id = <1>;//LGD_LH530QH1_QWXGA_CMD_PANEL
+		fih,always_display_power_keep;
+		fih,always_display_power_keep-1p8;
+		fih,always_display_power_keep-3p3;
+		fih,always_display_power_keep-lab;
+		fih,always_display_power_keep-ibb;
+		qcom,mdss-dsi-panel-width = <720>;
+		qcom,mdss-dsi-panel-height = <2560>;
+		qcom,mdss-dsi-h-front-porch = <60>;
+		qcom,mdss-dsi-h-back-porch = <80>;
+		qcom,mdss-dsi-h-pulse-width = <12>;
+		qcom,mdss-dsi-h-sync-skew = <0>;
+		qcom,mdss-dsi-v-back-porch = <155>;
+		qcom,mdss-dsi-v-front-porch = <150>;
+		qcom,mdss-dsi-v-pulse-width = <1>;
+		qcom,mdss-dsi-h-left-border = <0>;
+		qcom,mdss-dsi-h-right-border = <0>;
+		qcom,mdss-dsi-v-top-border = <0>;
+		qcom,mdss-dsi-v-bottom-border = <0>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+		qcom,mdss-dsi-underflow-color = <0xff>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,mdss-dsi-h-sync-pulse = <0>;
+		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+		qcom,mdss-dsi-lp11-init;
+		qcom,adjust-timer-wakeup-ms = <1>;
+		qcom,mdss-dsi-reset-sequence = <1 10>, <0 10>, <1 10>;
+		qcom,mdss-dsi-bl-max-level = <4095>;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-te-pin-select = <1>;
+		qcom,mdss-dsi-wr-mem-start = <0x2c>;
+		qcom,mdss-dsi-wr-mem-continue = <0x3c>;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-dsi-te-check-enable;
+		qcom,mdss-dsi-te-using-te-pin;
+		qcom,mdss-dsi-tx-eot-append;
+		qcom,mdss-pan-physical-width-dimension = <65>;
+		qcom,mdss-pan-physical-height-dimension = <117>;
+		qcom,ulps-enabled;
+		qcom,suspend-ulps-enabled;
+		//qcom,mdss-tear-check-sync-cfg-height = <2580>;
+		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+
+		qcom,mdss-dsi-aod-resume-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-aod-suspend-command-state = "dsi_hs_mode";
+
+		qcom,mdss-dsi-aod-suspend-command = [
+			39 01 00 00 0a 00 08 CA BD BD CC 0C 02 93 00
+			39 01 00 00 0a 00 0D FF 88 11 22 02 42 00 02 00 0A 00 02 D0
+			15 01 00 00 0a 00 02 53 2C
+			05 01 00 00 78 00 02 12 00
+		];
+
+		qcom,mdss-dsi-aod-resume-command = [
+			39 01 00 00 0a 00 08 CA BD BD CC 0C 00 93 00
+			39 01 00 00 0a 00 0D FF 88 11 22 02 42 C2 02 00 0A 00 02 D0
+			15 01 00 00 0a 00 02 53 2C
+			05 01 00 00 78 00 02 13 00
+		];
+
+		qcom,mdss-dsi-on-command = [
+			15 01 00 00 00 00 02 B0 AC
+			39 01 00 00 00 00 05 CC 01 00 0B 05
+			39 01 00 00 00 00 05 CC 00 00 0B 05
+			39 01 00 00 00 00 05 30 00 00 02 A8 				  // 2A8 for AoD read in full frame
+			//05 01 00 00 0a 00 02 34 00		  //TEOFF
+			15 01 00 00 00 00 02 35 00	   //TEON
+			15 01 00 00 00 00 02 51 FF	   //DBV : Write Display Brightness
+			15 01 00 00 00 00 02 53 2C	   //HBM=0,BCTRL=1,DD=0,BL=1, CABC_SEL(b0) 0=SIC, 1=SIW
+			15 01 00 00 00 00 02 55 00	   //Write Content Adaptive Brightness Control
+			//15 01 00 00 0a 00 02 5E 00	 //CMB=CABC Minimum Brightness
+			39 01 00 00 00 00 08 B3 0A 14 28 C8 1A 94 02
+			39 01 00 00 00 00 0b B4 91 08 0A 0A 0A 0A 14 14 14 14
+			39 01 00 00 00 00 0f B5 28 10 20 C8 22 09 09 01 01 50 68 E8 05 05
+			39 01 00 00 00 00 05 B6 16 0E 0C 00
+			//39 01 00 00 0a 00 03 B7 4C 00    //CPMODE=00 : Normal QHD , 10 : FHD -> QHD Upscale , 11 : HD720 -> QHD Upscale
+			39 01 00 00 00 00 07 B8 61 91 7F 00 70 2A //Foward (Normal Black, BGR Order , Sub-pixel Inversion disable)
+			39 01 00 00 00 00 03 C0 91 00	 //11=60hz , 06=30hz , 03=19hz , 02=15hz , 01=10hz , 00=5hz
+			39 01 00 00 00 00 07 C1 01 E0 F0 C2 CF F0
+			15 01 00 00 00 00 02 C2 CC	  //DC3=F_PCLK/1024 , DC2=F_PCLK/1024
+			39 01 00 00 00 00 08 C3 35 44 22 26 21 55 DD   //VCL,VGH,VGL Setting @Feedback mode
+			39 01 00 00 00 00 04 C4 A2 A4 A4	 //9E=8.4V,A0=8.6V,A2=8.8V,A4=9V,A6=9.2V,A8=9.4V
+			//39 01 00 00 0a 00 08 C5 24 20 A0 22 14 34 02	  //22=Vcom=-0.2782V , 14=VdataH=+5.21V , 34=VdataL=-5.21V
+			39 01 00 00 00 00 03 C9 9F 00	  //APO Enable (VDDI :1.2V , DDVDH : 2.8V Detection Level)
+			39 01 00 00 00 00 0C CB 86 86 77 06 01 08 16 0E 0C 00 36
+			39 01 00 00 00 00 1A CD F8 48 08 3C 33 23 22 06 04 01 08 57 AC 04 04 BC 44 08 50 0A 34 AA 00 00 02	  // 6LongH
+			39 01 00 00 00 00 0E D0 00 10 21 2D 38 40 4F 46 3B 2F 22 18 03	  //Positive Gamma Curve for Blue
+			39 01 00 00 00 00 0E D1 00 10 21 2D 38 40 4F 46 3B 2F 22 1C 03	  //Negative Gamma Curve for Blue
+			39 01 00 00 00 00 0E D2 00 10 21 2D 38 40 4F 46 3B 2F 22 18 03	  //Positive Gamma Curve for Green
+			39 01 00 00 00 00 0E D3 00 10 21 2D 38 40 4F 46 3B 2F 22 1C 03	  //Negative Gamma Curve for Green
+			39 01 00 00 00 00 0E D4 00 10 21 2D 38 40 4F 46 39 2A 15 00 03	  //Positive Gamma Curve for Red
+			39 01 00 00 00 00 0E D5 00 10 21 2D 38 40 4F 46 39 2A 15 04 03 	  //Negative Gamma Curve for Red
+			39 01 00 00 00 00 16 D6 22 6D 6C 6E 22 61 22 65 67 69 6B 22 71 59 95 6A 03 59 95 6A 03
+			39 01 00 00 00 00 16 D7 22 6D 6C 6E 22 60 22 64 66 68 6A 22 71 59 95 6A 03 59 95 6A 03
+			39 01 00 00 00 00 07 D8 78 77 76 75 74 73
+			39 01 00 00 00 00 07 D9 78 77 76 75 74 73
+			39 01 00 00 00 00 08 CA BD BD CC 0C 00 93 00
+			39 01 00 00 00 00 04 E8 00 00 00
+			39 01 00 00 00 00 07 B9 13 00 00 78 7F 80
+			15 01 00 00 00 00 02 F0 42
+			39 01 00 00 00 00 05 F2 01 00 04 00
+			39 01 00 00 00 00 18 F3 00 43 83 C0 FF 30 00 40 80 C0 FF 50 00 40 80 C0 FF 00 00 40 80 C0 FF
+			39 01 00 00 00 00 19 FC 0F 60 75 87 A8 C0 E4 F0 00 40 70 90 A0 B0 C0 F0 00 20 40 60 80 A0 C0 E0
+			39 01 00 00 00 00 18 FE 20 40 60 80 A0 C0 E0 10 13 14 03 18 17 14 00 CD D3 DA E0 E8 D5 FA FF
+			39 01 00 00 00 00 0D FF 88 11 22 02 42 C2 02 00 0A 00 02 D0
+			//39 01 00 00 0a 00 03 C6 18 55
+			39 01 00 00 00 00 05 EB 38 C1 00 00
+			05 01 00 00 00 00 02 29 00
+			05 01 00 00 33 00 02 11 00
+
+		];
+
+		//qcom,mdss-dsi-post-panel-on-command = [05 01 00 00 a0 00 01 29];
+
+		qcom,mdss-dsi-off-command = [
+			15 01 00 00 0a 00 02 ff 10
+//			05 01 00 00 78 00 02 28 00
+			05 01 00 00 78 00 02 10 00
+		];
+
+		qcom,config-select = <&dsi_jds_dualdsu_cmd_config0>;
+
+		dsi_jds_dualdsu_cmd_config0: config0 {
+			qcom,split-mode = "dualctl-split";
+		};
+
+		dsi_jds_dualdsu_cmd_config1: config1 {
+			qcom,split-mode = "pingpong-split";
+		};
+	};
+};

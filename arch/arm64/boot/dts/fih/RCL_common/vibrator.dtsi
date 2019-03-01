@@ -1,0 +1,10 @@
+&pmi8998_haptics {
+	status = "okay";
+	qcom,vmax-mv = <2000>;
+	qcom,ilim-ma = <300>;
+	qcom,wave-shape = "square";
+	qcom,wave-play-rate-us = <6667>;
+	qcom,lra-auto-res-mode = "none";
+	/delete-property/ qcom,lra-high-z;
+	/delete-property/ qcom,lra-res-cal-period;
+};
