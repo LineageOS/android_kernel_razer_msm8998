@@ -1460,9 +1460,7 @@ int adreno_dispatcher_queue_cmds(struct kgsl_device_private *dev_priv,
 
 	spin_unlock(&drawctxt->lock);
 
-	if (device->pwrctrl.l2pc_update_queue)
-		kgsl_pwrctrl_update_l2pc(&adreno_dev->dev,
-				KGSL_L2PC_QUEUE_TIMEOUT);
+	kgsl_pwrctrl_update_l2pc(&adreno_dev->dev);
 
 	/* Add the context to the dispatcher pending list */
 	dispatcher_queue_context(adreno_dev, drawctxt);
@@ -2815,6 +2813,16 @@ int adreno_dispatcher_init(struct adreno_device *adreno_dev)
 	return ret;
 }
 
+void adreno_dispatcher_halt(struct kgsl_device *device)
+{
+	adreno_get_gpu_halt(ADRENO_DEVICE(device));
+}
+
+void adreno_dispatcher_unhalt(struct kgsl_device *device)
+{
+	adreno_put_gpu_halt(ADRENO_DEVICE(device));
+}
+
 /*
  * adreno_dispatcher_idle() - Wait for dispatcher to idle
  * @adreno_dev: Adreno device whose dispatcher needs to idle
@@ -2844,6 +2852,13 @@ int adreno_dispatcher_idle(struct adreno_device *adreno_dev)
 	adreno_get_gpu_halt(adreno_dev);
 
 	mutex_unlock(&device->mutex);
+
+	/*
+	 * Flush the worker to make sure all executing
+	 * or pending dispatcher works on worker are
+	 * finished
+	 */
+	flush_kthread_worker(&kgsl_driver.worker);
 
 	ret = wait_for_completion_timeout(&dispatcher->idle_gate,
 			msecs_to_jiffies(ADRENO_IDLE_TIMEOUT));

@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -33,6 +34,8 @@
 #define VSYNC_DELAY msecs_to_jiffies(17)
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
+
+static int mdss_dsi_ie_sre_mode(struct mdss_panel_data *pdata, u32 mode);
 
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
@@ -181,19 +184,20 @@ static void mdss_dsi_panel_apply_settings(struct mdss_dsi_ctrl_pdata *ctrl,
 }
 
 
-static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
+static int mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 			struct dsi_panel_cmds *pcmds, u32 flags)
 {
 	struct dcs_cmd_req cmdreq;
 	struct mdss_panel_info *pinfo;
+	int count = 0;
 
 	pinfo = &(ctrl->panel_data.panel_info);
 	if (pinfo->dcs_cmd_by_left) {
 		if (ctrl->ndx != DSI_CTRL_LEFT)
-			return;
+			return 0;
 	}
+	ATRACE_FUNC();
 
-	memset(&cmdreq, 0, sizeof(cmdreq));
 	cmdreq.cmds = pcmds->cmds;
 	cmdreq.cmds_cnt = pcmds->cmd_cnt;
 	cmdreq.flags = flags;
@@ -206,11 +210,15 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	cmdreq.rlen = 0;
 	cmdreq.cb = NULL;
+	cmdreq.rbuf = NULL;
 
-	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+	count = mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+
+	ATRACE_END(__func__);
+	return count;
 }
 
-static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
+static char led_pwm1[3] = {0x51, 0x0, 0x0};	/* DTYPE_DCS_WRITE1 */
 static struct dsi_cmd_desc backlight_cmd = {
 	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)},
 	led_pwm1
@@ -227,9 +235,10 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 			return;
 	}
 
-	pr_debug("%s: level=%d\n", __func__, level);
+	led_pwm1[2] = ((unsigned int) level & 0xff);
+	led_pwm1[1] = (((unsigned int) level >> 8) & 0xff);
 
-	led_pwm1[1] = (unsigned char)level;
+	pr_debug("%s: level=%d -- 0x%x, 0x%x\n", __func__, level, led_pwm1[1], led_pwm1[2]);
 
 	memset(&cmdreq, 0, sizeof(cmdreq));
 	cmdreq.cmds = &backlight_cmd;
@@ -261,8 +270,8 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	}
 	rc = gpio_request(ctrl_pdata->rst_gpio, "disp_rst_n");
 	if (rc) {
-		pr_err("request reset gpio failed, rc=%d\n",
-			rc);
+		pr_err("%s: request reset gpio failed, rc=%d\n",
+			__func__, rc);
 		goto rst_gpio_err;
 	}
 	if (gpio_is_valid(ctrl_pdata->avdd_en_gpio)) {
@@ -327,7 +336,7 @@ int mdss_dsi_bl_gpio_ctrl(struct mdss_panel_data *pdata, int enable)
 	if (!ctrl_pdata->bklt_en_gpio_state && enable) {
 		rc = gpio_request(ctrl_pdata->bklt_en_gpio, "bklt_enable");
 		if (rc) {
-			pr_err("request bklt gpio failed, rc=%d\n", rc);
+			pr_err("%s: request bklt gpio failed, rc=%d\n", __func__, rc);
 			goto free;
 		}
 
@@ -387,12 +396,24 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 				panel_data);
 
 	pinfo = &(ctrl_pdata->panel_data.panel_info);
-	if ((mdss_dsi_is_right_ctrl(ctrl_pdata) &&
-		mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data)) ||
-			pinfo->is_dba_panel) {
-		pr_debug("%s:%d, right ctrl gpio configuration not needed\n",
-			__func__, __LINE__);
-		return rc;
+
+	if (enable) {
+		if ((mdss_dsi_is_right_ctrl(ctrl_pdata) &&
+			mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data)) ||
+				pinfo->is_dba_panel) {
+			pr_debug("%s:%d, right ctrl gpio configuration not needed\n",
+				__func__, __LINE__);
+			return rc;
+		}
+	}
+	else {
+		if ((mdss_dsi_is_left_ctrl(ctrl_pdata) &&
+			mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data)) ||
+				pinfo->is_dba_panel) {
+			pr_debug("%s:%d, left ctrl gpio configuration not needed\n",
+				__func__, __LINE__);
+			return rc;
+		}
 	}
 
 	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
@@ -411,7 +432,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 	if (enable) {
 		rc = mdss_dsi_request_gpios(ctrl_pdata);
 		if (rc) {
-			pr_err("gpio request failed\n");
+			pr_err("%s: gpio request failed\n", __func__);
 			return rc;
 		}
 		if (!pinfo->cont_splash_enabled) {
@@ -770,6 +791,8 @@ static int mdss_dsi_panel_apply_display_setting(struct mdss_panel_data *pdata,
 		return -EINVAL;
 	}
 
+	ATRACE_FUNC();
+
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
@@ -783,10 +806,13 @@ static int mdss_dsi_panel_apply_display_setting(struct mdss_panel_data *pdata,
 	else if ((mode == MDSS_PANEL_LOW_PERSIST_MODE_OFF) &&
 			(lp_on_cmds->cmd_cnt))
 		mdss_dsi_panel_apply_settings(ctrl, lp_off_cmds);
-	else
+	else {
+		ATRACE_END(__func__);
 		return -EINVAL;
+	}
 
 	pr_debug("%s: Persistence mode %d applied\n", __func__, mode);
+	ATRACE_END(__func__);
 	return 0;
 }
 
@@ -794,8 +820,8 @@ static void mdss_dsi_panel_switch_mode(struct mdss_panel_data *pdata,
 							int mode)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
-	struct mipi_panel_info *mipi;
-	struct dsi_panel_cmds *pcmds;
+	struct mipi_panel_info *mipi = NULL;
+	struct dsi_panel_cmds *pcmds = NULL;
 	u32 flags = 0;
 
 	if (pdata == NULL) {
@@ -803,20 +829,43 @@ static void mdss_dsi_panel_switch_mode(struct mdss_panel_data *pdata,
 		return;
 	}
 
-	mipi  = &pdata->panel_info.mipi;
+	mipi = &pdata->panel_info.mipi;
 
 	if (!mipi->dms_mode)
 		return;
 
+	ATRACE_FUNC();
+
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	if (mipi->dms_mode != DYNAMIC_MODE_RESOLUTION_SWITCH_IMMEDIATE) {
-		flags |= CMD_REQ_COMMIT;
-		if (mode == SWITCH_TO_CMD_MODE)
+	if (mipi->dms_mode == DYNAMIC_MODE_SWITCH_IMMEDIATE) {
+		flags = CMD_REQ_COMMIT;
+
+		switch (mode) {
+		case SWITCH_TO_CMD_MODE:
 			pcmds = &ctrl_pdata->video2cmd;
-		else
+			break;
+		case SWITCH_TO_VIDEO_MODE:
 			pcmds = &ctrl_pdata->cmd2video;
+			break;
+		case SWITCH_RESOLUTION:
+			if (pdata->current_timing && !list_empty(&pdata->timings_list)) {
+				struct dsi_panel_timing *pt;
+
+				pt = container_of(pdata->current_timing,
+						struct dsi_panel_timing, timing);
+
+				pr_debug("%s: sending switch resolution commands\n", __func__);
+				pcmds = &pt->switch_cmds;
+			} else {
+				pr_warn("%s: Invalid mode switch attempted\n", __func__);
+			}
+			break;
+		default:
+			pr_warn("%s: Invalid mode switch attempted\n", __func__);
+			break;
+		}
 	} else if ((mipi->dms_mode ==
 				DYNAMIC_MODE_RESOLUTION_SWITCH_IMMEDIATE)
 			&& pdata->current_timing
@@ -832,18 +881,139 @@ static void mdss_dsi_panel_switch_mode(struct mdss_panel_data *pdata,
 		flags |= CMD_REQ_COMMIT;
 	} else {
 		pr_warn("%s: Invalid mode switch attempted\n", __func__);
-		return;
 	}
 
 	if ((pdata->panel_info.compression_mode == COMPRESSION_DSC) &&
-			(pdata->panel_info.send_pps_before_switch))
+			(pdata->panel_info.disable_sending_pps == false) &&
+			(pdata->panel_info.send_pps_before_switch == true) &&
+			(mode != SWITCH_TO_CMD_MODE)) {
 		mdss_dsi_panel_dsc_pps_send(ctrl_pdata, &pdata->panel_info);
+	}
 
-	mdss_dsi_panel_cmds_send(ctrl_pdata, pcmds, flags);
+	if (pcmds != NULL && pcmds->cmd_cnt > 0) {
+		mdss_dsi_panel_cmds_send(ctrl_pdata, pcmds, flags);
+	}
 
 	if ((pdata->panel_info.compression_mode == COMPRESSION_DSC) &&
-			(!pdata->panel_info.send_pps_before_switch))
+			(pdata->panel_info.disable_sending_pps == false) &&
+			(pdata->panel_info.send_pps_before_switch == false) &&
+			(mode != SWITCH_TO_CMD_MODE)) {
 		mdss_dsi_panel_dsc_pps_send(ctrl_pdata, &pdata->panel_info);
+	}
+
+	ATRACE_END(__func__);
+}
+
+static int mdss_dsi_panel_refresh_rate_ctl(struct mdss_panel_data *pdata, int rate)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl;
+	struct refresh_rate_config *cfg;
+	u32 vfp;
+	u32 non_refresh_frames = 0;
+	u32 flags = CMD_REQ_COMMIT;
+	int rc = 0;
+	int count = 0;
+
+	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+	if (ctrl == NULL) {
+		return -EINVAL;
+	}
+
+	cfg = &ctrl->refresh_rate_cfg;
+	if (cfg->config_cmds.cmd_cnt == 0) {
+		return 0;
+	}
+
+	ATRACE_FUNC();
+
+	// Convert the refresh rate to VFP from below equation:
+	//    rate = CLK / ((height + VBP + VPW + VFP) * (width + HBP + HFP + HPW) * sizeof(pixel) / num_lanes)
+	if (rate > 60) {
+		non_refresh_frames = 0;
+		vfp = ((522547200 / rate) - 4327680) / 1680;
+	} else if (rate >= 30) {
+		// Divide frame refresh in half
+		non_refresh_frames = 1;
+		vfp = ((522547200 / rate / 2) - 4327680) / 1680;
+	} else {
+		pr_err("%s: invalid refresh rate -- %d\n", __func__, rate);
+		ATRACE_END(__func__);
+		return -EINVAL;
+	}
+
+	cfg->config_cmds.cmds[2].payload[1] = non_refresh_frames;
+
+	// Note: These below patches need to be updated if the associated DTSI commands change
+	// Command mode VFP
+	cfg->config_cmds.cmds[3].payload[1] = (vfp >> 8) & 0xff;
+	cfg->config_cmds.cmds[4].payload[1] = vfp & 0xff;
+
+	cfg->enabled = true;
+	cfg->rate = rate;
+
+	pr_debug("%s: sending panel VFP commands -- non-refresh=0x%x, vfp=0x%x (cmd: 0x%x, 0x%x, video: 0x, 0x)", __func__,
+		cfg->config_cmds.cmds[2].payload[1],
+		vfp,
+		cfg->config_cmds.cmds[3].payload[1],
+		cfg->config_cmds.cmds[4].payload[1]);
+
+	count = mdss_dsi_panel_cmds_send(ctrl, &cfg->config_cmds, flags);
+	if (!count) {
+		pr_err("%s: failed to send refresh rate DDIC commands!\n", __func__);
+		rc = 1;
+	}
+	ATRACE_END(__func__);
+	return rc;
+}
+
+static void mdss_dsi_panel_night_mode_ctl(struct mdss_panel_data *pdata, int profile_id,
+		bool panel_on)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl;
+	struct night_mode_config *cfg;
+
+	ATRACE_FUNC();
+
+	pr_info("%s: profile_id: %d\n", __func__, profile_id);
+
+	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	cfg = &ctrl->night_mode_cfg;
+	cfg->current_profile = profile_id;
+	if (!panel_on) {
+		ATRACE_END(__func__);
+		return;
+	}
+
+	if (profile_id >= 0) {
+		if (!cfg->on_cmds.cmd_cnt) {
+			pr_err("%s: night mode on commands not present\n", __func__);
+			cfg->current_profile = -1;
+			return;
+		}
+		if (cfg->profiles_cnt && profile_id < cfg->profiles_cnt) {
+			if (!cfg->profiles_cmds[profile_id].cmd_cnt) {
+				pr_err("%s: no commands present for profile: %d\n", __func__, profile_id);
+				cfg->current_profile = -1;
+				ATRACE_END(__func__);
+				return;
+			}
+			mdss_dsi_panel_cmds_send(ctrl, &cfg->on_cmds, CMD_REQ_COMMIT);
+			mdss_dsi_panel_cmds_send(ctrl, &cfg->profiles_cmds[profile_id], CMD_REQ_COMMIT);
+		}
+	} else {
+		if (!cfg->off_cmds.cmd_cnt) {
+			pr_err("%s: night mode offf commands not present\n", __func__);
+			ATRACE_END(__func__);
+			return;
+		}
+
+		mdss_dsi_panel_cmds_send(ctrl, &cfg->off_cmds, CMD_REQ_COMMIT);
+	}
+
+	ATRACE_END(__func__);
 }
 
 static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
@@ -851,10 +1021,18 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 {
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	struct mdss_dsi_ctrl_pdata *sctrl = NULL;
+	struct mdss_panel_info *pinfo = NULL;
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
 		return;
+	}
+
+	pinfo = &pdata->panel_info;
+
+	if (pinfo->bl_skip_enabled && bl_level > pinfo->bl_skip[0] && bl_level < pinfo->bl_skip[1]) {
+		bl_level = pinfo->bl_skip[1];
+		pr_debug("%s: cap bl_level to %d\n", __func__, bl_level);
 	}
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
@@ -926,6 +1104,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		pr_err("%s: Invalid input data\n", __func__);
 		return -EINVAL;
 	}
+	ATRACE_FUNC();
 
 	pinfo = &pdata->panel_info;
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
@@ -940,15 +1119,18 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 
 	on_cmds = &ctrl->on_cmds;
 
+	ATRACE_BEGIN("panel-on-cmds");
 	if ((pinfo->mipi.dms_mode == DYNAMIC_MODE_SWITCH_IMMEDIATE) &&
-			(pinfo->mipi.boot_mode != pinfo->mipi.mode))
+			(pinfo->mipi.boot_mode != pinfo->mipi.mode)) {
 		on_cmds = &ctrl->post_dms_on_cmds;
+	}
 
 	pr_debug("%s: ndx=%d cmd_cnt=%d\n", __func__,
 				ctrl->ndx, on_cmds->cmd_cnt);
 
 	if (on_cmds->cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, on_cmds, CMD_REQ_COMMIT);
+	ATRACE_END("panel-on-cmds");
 
 	if (pinfo->compression_mode == COMPRESSION_DSC)
 		mdss_dsi_panel_dsc_pps_send(ctrl, pinfo);
@@ -956,11 +1138,26 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	if (ctrl->ds_registered)
 		mdss_dba_utils_video_on(pinfo->dba_data, pinfo);
 
+	if (ctrl->ie_sre_cmds.cmd_cnt && (ctrl->ie_sre_mode > 0)) {
+		mdss_dsi_ie_sre_mode(pdata, ctrl->ie_sre_mode >> 4);
+	}
+
+	/* Night mode DDIC command are not persisted across a suspend and resume. So
+	   If the feature is supported and a profile is set, then send the DDIC
+	   commands when the panel turns on. */
+	if (ctrl->night_mode_cfg.enabled && ctrl->night_mode_cfg.current_profile >= 0)
+		mdss_dsi_panel_night_mode_ctl(pdata, ctrl->night_mode_cfg.current_profile, true);
+
+	if (ctrl->refresh_rate_cfg.enabled)
+		mdss_dsi_panel_refresh_rate_ctl(pdata, pinfo->mipi.frame_rate);
+
 	/* Ensure low persistence mode is set as before */
 	mdss_dsi_panel_apply_display_setting(pdata, pinfo->persist_mode);
 
 end:
 	pr_debug("%s:-\n", __func__);
+
+	ATRACE_END(__func__);
 	return ret;
 }
 
@@ -1211,7 +1408,6 @@ exit_free:
 	return -ENOMEM;
 }
 
-
 int mdss_panel_get_dst_fmt(u32 bpp, char mipi_mode, u32 pixel_packing,
 				char *dst_format)
 {
@@ -1352,7 +1548,9 @@ void mdss_dsi_panel_dsc_pps_send(struct mdss_dsi_ctrl_pdata *ctrl,
 	struct dsi_panel_cmds pcmds;
 	struct dsi_cmd_desc cmd;
 
-	if (!pinfo || (pinfo->compression_mode != COMPRESSION_DSC))
+	if (!pinfo ||
+			(pinfo->compression_mode != COMPRESSION_DSC) ||
+			(pinfo->disable_sending_pps == true))
 		return;
 
 	memset(&pcmds, 0, sizeof(pcmds));
@@ -1369,7 +1567,11 @@ void mdss_dsi_panel_dsc_pps_send(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	pcmds.cmd_cnt = 1;
 	pcmds.cmds = &cmd;
-	pcmds.link_state = DSI_LP_MODE;
+	/* Novatek recommended sending the panel on commands in HS mode.  This
+	   works okay in command mode but in video mode it significantly
+	   increases the time to turn on the display. So make sure we send these
+	   commands in command mode only. */
+	pcmds.link_state = DSI_HS_MODE;
 
 	mdss_dsi_panel_cmds_send(ctrl, &pcmds, CMD_REQ_COMMIT);
 }
@@ -1714,6 +1916,9 @@ static int mdss_dsi_parse_topology_config(struct device_node *np,
 				of_property_read_bool(np,
 				"qcom,mdss-dsi-send-pps-before-switch");
 
+			pinfo->disable_sending_pps = of_property_read_bool(np,
+				"razer,mdss-dsi-disable-sending-pps");
+
 			rc = mdss_dsi_parse_dsc_params(cfg_np, &pt->timing,
 					is_split_display);
 		} else if (!strcmp(data, "fbc")) {
@@ -1951,8 +2156,20 @@ static void mdss_dsi_parse_dms_config(struct device_node *np,
 
 	if (pinfo->mipi.dms_mode == DYNAMIC_MODE_SWITCH_IMMEDIATE &&
 		!ctrl->post_dms_on_cmds.cmd_cnt) {
-		pr_warn("%s: No post dms on cmd specified\n", __func__);
-		pinfo->mipi.dms_mode = DYNAMIC_MODE_SWITCH_DISABLED;
+		// Check to see if we have these per resolution
+		if (!list_empty(&ctrl->panel_data.timings_list)) {
+			struct dsi_panel_timing *pt;
+
+			pt = container_of(ctrl->panel_data.current_timing,
+					struct dsi_panel_timing, timing);
+			if (!pt->post_dms_on_cmds.cmd_cnt) {
+				pr_warn("%s: No post dms on cmd specified in timings list\n", __func__);
+				pinfo->mipi.dms_mode = DYNAMIC_MODE_SWITCH_DISABLED;
+			}
+		} else {
+			pr_warn("%s: No post dms on cmd specified\n", __func__);
+			pinfo->mipi.dms_mode = DYNAMIC_MODE_SWITCH_DISABLED;
+		}
 	}
 
 	if (!ctrl->video2cmd.cmd_cnt || !ctrl->cmd2video.cmd_cnt) {
@@ -2165,6 +2382,81 @@ static void mdss_dsi_parse_partial_update_caps(struct device_node *np,
 	}
 }
 
+static int mdss_dsi_parse_refresh_rate_configs(struct device_node *np,
+		struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	mdss_dsi_parse_dcs_cmds(np, &ctrl->refresh_rate_cfg.config_cmds,
+			"razer,refresh-rate-config-cmds",
+			"razer,refresh-rate-config-cmds-state");
+
+	ctrl->refresh_rate_cfg.rate = 0;
+	ctrl->refresh_rate_cfg.enabled = false;
+	return 0;
+
+}
+
+static int mdss_dsi_parse_night_mode(struct device_node *np,
+	struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	struct dsi_panel_cmds *profiles_cmds;
+	struct device_node *profiles_np;
+	struct device_node *profile_entry;
+	int profiles_cnt, rc, i;
+
+	ctrl->night_mode_cfg.enabled = of_property_read_bool(np,
+		"razer,night-mode-enabled");
+	if (!ctrl->night_mode_cfg.enabled) {
+		ctrl->night_mode_cfg.profiles_cmds = NULL;
+		ctrl->night_mode_cfg.profiles_cnt = 0;
+		ctrl->night_mode_cfg.current_profile = -1;
+		return 0;
+	}
+
+	rc = mdss_dsi_parse_dcs_cmds(np, &ctrl->night_mode_cfg.on_cmds,
+			"razer,night-mode-on-commands",
+			"razer,night-mode-on-commands-state");
+	if (rc)
+		return rc;
+
+	rc = mdss_dsi_parse_dcs_cmds(np, &ctrl->night_mode_cfg.off_cmds,
+			"razer,night-mode-off-commands",
+			"razer,night-mode-off-commands-state");
+	if (rc)
+		return rc;
+
+	profiles_np = of_get_child_by_name(np, "razer,night-mode-profiles");
+	if (!profiles_np) {
+		pr_warn("%s: no night mode profiles found, will rely on nigh-on-commands\n", __func__);
+		return rc;
+	}
+
+	profiles_cnt = of_get_child_count(profiles_np);
+	if (profiles_cnt == 0) {
+		pr_warn("%s: night mode profiles are empty, will rely on nigh-on-commands\n", __func__);
+	}
+
+	profiles_cmds = kcalloc(profiles_cnt, sizeof(*profiles_cmds), GFP_KERNEL);
+	if (!profiles_cmds) {
+		pr_err("%s: cannot allocate memory for night mode profiles\n", __func__);
+		return -ENOMEM;
+	}
+
+	i = 0;
+	for_each_child_of_node(profiles_np, profile_entry) {
+		rc = mdss_dsi_parse_dcs_cmds(profile_entry, &profiles_cmds[i], "cmds", "cmds-state");
+		if (rc) {
+			pr_warn("%s: failed to parse night mode profile: %s\n", __func__, profile_entry->name);
+			profiles_cnt--;
+		}
+		i++;
+	}
+
+	ctrl->night_mode_cfg.profiles_cmds = profiles_cmds;
+	ctrl->night_mode_cfg.profiles_cnt = profiles_cnt;
+	ctrl->night_mode_cfg.current_profile = -1;
+	return 0;
+}
+
 static int mdss_dsi_parse_panel_features(struct device_node *np,
 	struct mdss_dsi_ctrl_pdata *ctrl)
 {
@@ -2222,6 +2514,20 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl->lp_off_cmds,
 			"qcom,mdss-dsi-lp-mode-off", NULL);
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl->ambient_idle_on_cmds,
+			"razer,ambient-idle-mode-on-commands",
+			"razer,ambient-idle-mode-on-commands-state");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl->ambient_idle_off_cmds,
+			"razer,ambient-idle-mode-off-commands",
+			"razer,ambient-idle-mode-off-commands-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl->ie_sre_cmds,
+			"razer,ie_sre_enable", "razer,ie_sre_enable-state");
+
+	mdss_dsi_parse_night_mode(np, ctrl);
+
+	mdss_dsi_parse_refresh_rate_configs(np, ctrl);
 
 	return 0;
 }
@@ -2311,8 +2617,23 @@ static int mdss_dsi_set_refresh_rate_range(struct device_node *pan_node,
 		rc = 0;
 	}
 
-	pr_info("dyn_fps: min = %d, max = %d\n",
-			pinfo->min_fps, pinfo->max_fps);
+	rc = of_property_read_u32(pan_node,
+			"razer,mdss-dsi-avr-min-refresh-rate",
+			&pinfo->avr_min_fps);
+	if (rc) {
+		pr_warn("%s:%d, Unable to read avr min refresh rate\n",
+				__func__, __LINE__);
+
+		/*
+		 * If avr min refresh rate is not specified, set it to the
+		 * default panel min refresh rate.
+		 */
+		pinfo->avr_min_fps = pinfo->min_fps;
+		rc = 0;
+	}
+
+	pr_info("dyn_fps: min = %d, max = %d, avr_min = %d\n",
+			pinfo->min_fps, pinfo->max_fps, pinfo->avr_min_fps);
 	return rc;
 }
 
@@ -2486,6 +2807,7 @@ int mdss_dsi_panel_timing_switch(struct mdss_dsi_ctrl_pdata *ctrl,
 		pinfo->mipi.dsi_phy_db.timing_8996[i] = pt->phy_timing_8996[i];
 
 	ctrl->on_cmds = pt->on_cmds;
+	ctrl->post_dms_on_cmds = pt->post_dms_on_cmds;
 	ctrl->post_panel_on_cmds = pt->post_panel_on_cmds;
 
 	ctrl->panel_data.current_timing = timing;
@@ -2632,6 +2954,10 @@ static int  mdss_dsi_panel_config_res_properties(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &pt->post_panel_on_cmds,
 		"qcom,mdss-dsi-post-panel-on-command", NULL);
 
+	mdss_dsi_parse_dcs_cmds(np, &pt->post_dms_on_cmds,
+		"qcom,mdss-dsi-post-mode-switch-on-command",
+		"qcom,mdss-dsi-post-mode-switch-on-command-state");
+
 	mdss_dsi_parse_dcs_cmds(np, &pt->switch_cmds,
 		"qcom,mdss-dsi-timing-switch-command",
 		"qcom,mdss-dsi-timing-switch-command-state");
@@ -2726,6 +3052,78 @@ exit:
 	return rc;
 }
 
+static int mdss_dsi_ambient_mode(struct mdss_dsi_ctrl_pdata *ctrl_pdata, bool enable)
+{
+	struct dsi_panel_cmds *pcmds;
+
+	if (ctrl_pdata == NULL) {
+		pr_err("%s: Invalid ctrl pdata\n", __func__);
+		return -EINVAL;
+	}
+
+	if (enable)
+		pcmds = &ctrl_pdata->ambient_idle_on_cmds;
+	else
+		pcmds = &ctrl_pdata->ambient_idle_off_cmds;
+
+	if (!pcmds->cmd_cnt) {
+		pr_warn("%s: ambient idle cmd_cnt=0\n", __func__);
+		return -EINVAL;
+	}
+
+	pr_info("%s: ambient idle mode=%d\n", __func__, enable ? 1 : 0);
+
+	mdss_dsi_panel_cmds_send(ctrl_pdata, pcmds, CMD_REQ_COMMIT);
+
+	return 0;
+}
+
+static int mdss_dsi_ie_sre_mode(struct mdss_panel_data *pdata, u32 mode)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+	struct dsi_panel_cmds *pcmds;
+	int rc = 0;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return -EINVAL;
+	}
+
+	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	pcmds = &ctrl->ie_sre_cmds;
+	if (!pcmds->cmd_cnt) {
+		pr_warn("%s: CABC cmd_cnt=0\n", __func__);
+		return -EINVAL;
+	}
+
+	ATRACE_FUNC();
+
+	// Save the mode to [7:4], SRE_HBM_Enable=[3]
+	// 1 0 0 0 IE_Low
+	// 1 0 0 1 IE_Medium
+	// 1 0 1 1 IE_High
+	// 0 1 0 0 SRE_Low
+	// 0 1 0 1 SRE_Medium
+	// 0 1 1 0 SRE_High
+	ctrl->ie_sre_mode = ((mode & 0x0f) << 4);
+	if (mode > 0 && !(mode & 0x8)) {
+		// SRE Feature
+		ctrl->ie_sre_mode |= 0x08; // SRE_HBM_EN bit
+	}
+
+	// Need to retain the CABC bits
+	pcmds->cmds[pcmds->cmd_cnt-1].payload[1] = ctrl->ie_sre_mode | 0x3 /* moving mode */;
+
+	pr_info("%s: apply IE/SRE mode %x\n", __func__, pcmds->buf[pcmds->blen-1]);
+
+	mdss_dsi_panel_cmds_send(ctrl, pcmds, CMD_REQ_COMMIT);
+
+	ATRACE_END(__func__);
+	return rc;
+}
+
 static int mdss_panel_parse_dt(struct device_node *np,
 			struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
@@ -2799,6 +3197,8 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-max-level", &tmp);
 	pinfo->bl_max = (!rc ? tmp : 255);
 	ctrl_pdata->bklt_max = pinfo->bl_max;
+	pinfo->bl_skip_enabled = of_property_read_bool(np, "razer,mdss-dsi-bl-skip-enabled");
+	rc = of_property_read_u32_array(np, "razer,mdss-dsi-bl-skip-range", pinfo->bl_skip, 2);
 
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-interleave-mode", &tmp);
 	pinfo->mipi.interleave_mode = (!rc ? tmp : 0);
@@ -3021,6 +3421,9 @@ int mdss_dsi_panel_init(struct device_node *node,
 	pinfo->esd_rdy = false;
 	pinfo->persist_mode = false;
 
+	ctrl_pdata->ie_sre_mode = 0;
+	ctrl_pdata->apply_ie_sre_mode = mdss_dsi_ie_sre_mode;
+
 	ctrl_pdata->on = mdss_dsi_panel_on;
 	ctrl_pdata->post_panel_on = mdss_dsi_post_panel_on;
 	ctrl_pdata->off = mdss_dsi_panel_off;
@@ -3029,6 +3432,9 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->panel_data.apply_display_setting =
 			mdss_dsi_panel_apply_display_setting;
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
+	ctrl_pdata->night_mode_ctl = mdss_dsi_panel_night_mode_ctl;
+	ctrl_pdata->refresh_rate_ctl = mdss_dsi_panel_refresh_rate_ctl;
+	ctrl_pdata->configure_ambient_mode = mdss_dsi_ambient_mode;
 
 	return 0;
 }

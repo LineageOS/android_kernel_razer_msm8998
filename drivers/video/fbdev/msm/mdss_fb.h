@@ -1,5 +1,6 @@
 /* Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
- *
+ * Copyright (C) 2017-2018 Razer Inc.
+
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
  * only version 2 as published by the Free Software Foundation.
@@ -373,6 +374,7 @@ struct msm_fb_data_type {
 	u32 switch_new_mode;
 	bool pending_switch;
 	struct mutex switch_lock;
+	struct mutex ie_sre_lock;
 	struct input_handler *input_handler;
 };
 
@@ -459,6 +461,13 @@ static inline void mdss_fb_init_fps_info(struct msm_fb_data_type *mfd)
 {
 	memset(&mfd->fps_info, 0, sizeof(mfd->fps_info));
 }
+
+int mdss_fb_dfps_update_params(struct msm_fb_data_type *mfd,
+							   struct mdss_panel_data *pdata,
+							   struct dynamic_fps_data *dfps_data);
+int mdss_fb_set_dfps_max(struct msm_fb_data_type *mfd,
+						 struct mdss_panel_data *pdata,
+						 struct dynamic_fps_data *dfps_data);
 int mdss_fb_get_phys_info(dma_addr_t *start, unsigned long *len, int fb_num);
 void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl);
 void mdss_fb_update_backlight(struct msm_fb_data_type *mfd);
