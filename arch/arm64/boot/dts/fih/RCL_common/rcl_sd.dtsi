@@ -1,0 +1,79 @@
+/*
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	tlmm: pinctrl@03400000 {
+		/* SD pinctrl portion */
+		sdc2_cd_on: sdc2_cd_on {
+			mux {
+				pins = "gpio95";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio95";
+				bias-disable;           /* no pull */
+				drive-strength = <2>;   /* 2 MA */
+			};
+		};
+
+		sdc2_cd_off: sdc2_cd_off {
+			mux {
+				pins = "gpio95";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio95";
+				bias-disable;           /* no pull */
+				drive-strength = <2>;   /* 2 MA */
+			};
+
+		};
+
+		/* SIM1 pinctrl portion */
+		uim1_present_on: uim1_present_on {
+			mux {
+				pins = "gpio112";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio112";
+				bias-disable;           /* no pull */
+				drive-strength = <2>;   /* 2 MA */
+			};
+		};
+
+		uim1_present_off: uim1_present_off {
+			mux {
+				pins = "gpio112";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio112";
+				bias-disable;           /* no pull */
+				drive-strength = <2>;   /* 2 MA */
+			};
+
+		};
+	};
+};
+
+
+&sdhc_2 {
+	pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on &uim1_present_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off &uim1_present_off>;
+	cd-gpios = <&tlmm 95 0x0>;
+};

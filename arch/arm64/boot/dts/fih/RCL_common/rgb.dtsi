@@ -1,0 +1,51 @@
+&spmi_bus {
+  qcom,pmi8998@3 {
+		qcom,leds@d000 {
+			status = "okay";
+			red_led: qcom,rgb_0 {
+				qcom,start-idx = <1>;
+				qcom,idx-len = <10>;
+				qcom,duty-pcts = [00 19 32 4B 64
+						64 4B 32 19 00];
+				qcom,lut-flags = <3>;
+				qcom,pause-lo = <0>;
+				qcom,pause-hi = <0>;
+				qcom,ramp-step-ms = <255>;
+				qcom,use-blink;
+				qcom,default-state = "off";
+				linux,name = "red";
+				linux,default-trigger = "none";
+			};
+			
+			green_led: qcom,rgb_1 {
+				qcom,start-idx = <1>;
+				qcom,idx-len = <10>;
+				qcom,duty-pcts = [00 19 32 4B 64
+						64 4B 32 19 00];
+				qcom,lut-flags = <3>;
+				qcom,pause-lo = <0>;
+				qcom,pause-hi = <0>;
+				qcom,ramp-step-ms = <255>;
+				qcom,use-blink;
+				qcom,default-state = "off";
+				linux,name = "green";
+				linux,default-trigger = "none";
+			};
+
+			blue_led: qcom,rgb_2 {
+				qcom,start-idx = <1>;
+				qcom,idx-len = <10>;
+				qcom,duty-pcts = [00 19 32 4B 64
+						64 4B 32 19 00];
+				qcom,lut-flags = <3>;
+				qcom,pause-lo = <0>;
+				qcom,pause-hi = <0>;
+				qcom,ramp-step-ms = <255>;
+				qcom,use-blink;
+				qcom,default-state = "off";
+				linux,name = "blue";
+				linux,default-trigger = "none";
+			};
+		};
+	};
+};
