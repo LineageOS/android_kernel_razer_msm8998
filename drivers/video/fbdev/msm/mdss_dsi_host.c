@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1000,7 +1001,7 @@ void mdss_dsi_controller_cfg(int enable,
 {
 
 	u32 dsi_ctrl;
-	u32 status;
+	u32 status = 0;
 	u32 sleep_us = 1000;
 	u32 timeout_us = 16000;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
@@ -1018,7 +1019,7 @@ void mdss_dsi_controller_cfg(int enable,
 			   status,
 			   ((status & 0x02) == 0),
 			       sleep_us, timeout_us))
-		pr_info("%s: DSI status=%x failed\n", __func__, status);
+		pr_info("%s: CMD_MODE_DMA_BUSY DSI status=%x failed\n", __func__, status);
 
 	/* Check for x_HS_FIFO_EMPTY */
 	if (readl_poll_timeout(((ctrl_pdata->ctrl_base) + 0x000c),
@@ -1027,12 +1028,15 @@ void mdss_dsi_controller_cfg(int enable,
 			       sleep_us, timeout_us))
 		pr_info("%s: FIFO status=%x failed\n", __func__, status);
 
-	/* Check for VIDEO_MODE_ENGINE_BUSY */
+	/* Check for VIDEO_MODE_ENGINE_BUSY -- Timeout happens a lot here.
+	   Based on my analysis, resetting the DSI has no impact on mode
+	   mode switch.  So reduce the timeout significantly to improve
+	   the mode switching time. */
 	if (readl_poll_timeout(((ctrl_pdata->ctrl_base) + 0x0008),
 			   status,
 			   ((status & 0x08) == 0),
-			       sleep_us, timeout_us)) {
-		pr_debug("%s: DSI status=%x\n", __func__, status);
+			       sleep_us, /* timeout_us */ 8000)) {
+		pr_info("%s: VIDEO_MODE_ENGINE_BUSY DSI status=%x\n", __func__, status);
 		pr_debug("%s: Doing sw reset\n", __func__);
 		mdss_dsi_sw_reset(ctrl_pdata, false);
 	}
@@ -1812,8 +1816,8 @@ static int mdss_dsi_cmds2buf_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 				len = mdss_dsi_cmd_dma_tx(ctrl, tp);
 			if (IS_ERR_VALUE(len)) {
 				mdss_dsi_disable_irq(ctrl, DSI_CMD_TERM);
-				pr_err("%s: failed to call cmd_dma_tx for cmd = 0x%x\n",
-					__func__,  cm->payload[0]);
+				pr_err("%s: failed to call cmd_dma_tx (use_tpg=%d) for cmd = 0x%x\n",
+					__func__, use_dma_tpg, cm->payload[0]);
 				return 0;
 			}
 			pr_debug("%s: cmd_dma_tx for cmd = 0x%x, len = %d\n",
@@ -2609,6 +2613,8 @@ void mdss_dsi_cmd_mdp_busy(struct mdss_dsi_ctrl_pdata *ctrl)
 
 	if (need_wait) {
 		/* wait until DMA finishes the current job */
+		ATRACE_BEGIN("mdp_busy");
+
 		pr_debug("%s: pending pid=%d\n",
 				__func__, current->pid);
 		rc = wait_for_completion_timeout(&ctrl->mdp_comp,
@@ -2619,6 +2625,8 @@ void mdss_dsi_cmd_mdp_busy(struct mdss_dsi_ctrl_pdata *ctrl)
 		spin_unlock_irqrestore(&ctrl->mdp_lock, flags);
 		if (!rc && mdss_dsi_mdp_busy_tout_check(ctrl))
 			pr_err("%s: timeout error\n", __func__);
+
+		ATRACE_END("mdp_busy");
 	}
 	pr_debug("%s: done pid=%d\n", __func__, current->pid);
 	MDSS_XLOG(ctrl->ndx, ctrl->mdp_busy, current->pid, XLOG_FUNC_EXIT);
@@ -2719,23 +2727,15 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 	int ret = -EINVAL;
 	int rc = 0;
 	bool hs_req = false;
-	bool cmd_mutex_acquired = false;
 
 	if (from_mdp) {	/* from mdp kickoff */
-		if (!ctrl->burst_mode_enabled) {
-			mutex_lock(&ctrl->cmd_mutex);
-			cmd_mutex_acquired = true;
-		}
+		mutex_lock(&ctrl->cmd_mutex);
 		pinfo = &ctrl->panel_data.panel_info;
 		if (pinfo->partial_update_enabled)
 			roi = &pinfo->roi;
 	}
 
 	req = mdss_dsi_cmdlist_get(ctrl, from_mdp);
-	if (req && from_mdp && ctrl->burst_mode_enabled) {
-		mutex_lock(&ctrl->cmd_mutex);
-		cmd_mutex_acquired = true;
-	}
 
 	MDSS_XLOG(ctrl->ndx, from_mdp, ctrl->mdp_busy, current->pid,
 							XLOG_FUNC_ENTRY);
@@ -2743,7 +2743,8 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 	if (req && (req->flags & CMD_REQ_HS_MODE))
 		hs_req = true;
 
-	if ((!ctrl->burst_mode_enabled) || from_mdp) {
+	if ((!ctrl->burst_mode_enabled) || from_mdp ||
+	    (req && (req->flags & CMD_REQ_MDP_IDLE))) {
 		/* make sure dsi_cmd_mdp is idle */
 		mdss_dsi_cmd_mdp_busy(ctrl);
 	}
@@ -2757,7 +2758,7 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 		if (ctrl->shared_data->hw_rev >= MDSS_DSI_HW_REV_103) {
 			req->flags |= CMD_REQ_DMA_TPG;
 		} else {
-			if (cmd_mutex_acquired)
+			if (from_mdp)
 				mutex_unlock(&ctrl->cmd_mutex);
 			return -EPERM;
 		}
@@ -2814,7 +2815,8 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 			rc = ctrl->mdss_util->iommu_ctrl(1);
 			if (IS_ERR_VALUE(rc)) {
 				pr_err("IOMMU attach failed\n");
-				mutex_unlock(&ctrl->cmd_mutex);
+				if (from_mdp)
+					mutex_unlock(&ctrl->cmd_mutex);
 				return rc;
 			}
 			use_iommu = true;
@@ -2871,8 +2873,7 @@ need_lock:
 		 */
 		if (!roi || (roi->w != 0 || roi->h != 0))
 			mdss_dsi_cmd_mdp_start(ctrl);
-		if (cmd_mutex_acquired)
-			mutex_unlock(&ctrl->cmd_mutex);
+		mutex_unlock(&ctrl->cmd_mutex);
 	} else {	/* from dcs send */
 		if (ctrl->shared_data->cmd_clk_ln_recovery_en &&
 				ctrl->panel_mode == DSI_CMD_MODE &&

@@ -1,0 +1,15 @@
+&soc {
+
+	i2c_8: i2c@c1b6000 { /* BLSP2 QUP2 */
+		status = "okay";
+		tusb544@12 {
+			compatible = "ti,tusb544";
+			reg = <0x12>;
+			fih,redriver-en = <&tlmm 25 0>;
+			extcon = <&pmi8998_pdphy>;
+			qcom,dp-usbpd-detection = <&pmi8998_pdphy>;
+		};
+	};
+
+};
+

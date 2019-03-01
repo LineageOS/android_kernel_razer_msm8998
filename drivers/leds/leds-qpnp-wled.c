@@ -234,6 +234,10 @@
 #define QPNP_WLED_AVDD_MV_TO_REG(val) \
 		((val - QPNP_WLED_AVDD_MIN_MV) / QPNP_WLED_AVDD_STEP_MV)
 
+#define BBOX_LED_OVP            do {printk("BBox;%s: LED Voltage OVP \n", __func__); printk("BBox::UEC;1::2\n");} while (0);
+#define BBOX_LED_SC             do {printk("BBox;%s: LED Voltage SC\n", __func__); printk("BBox::UEC;1::2\n");} while (0);
+
+
 /* output feedback mode */
 enum qpnp_wled_fdbk_op {
 	QPNP_WLED_FDBK_AUTO,
@@ -1336,9 +1340,11 @@ static irqreturn_t qpnp_wled_ovp_irq_handler(int irq, void *_wled)
 		return IRQ_HANDLED;
 	}
 
-	if (fault_sts & (QPNP_WLED_OVP_FAULT_BIT | QPNP_WLED_ILIM_FAULT_BIT))
+	if (fault_sts & (QPNP_WLED_OVP_FAULT_BIT | QPNP_WLED_ILIM_FAULT_BIT)){
 		pr_err("WLED OVP fault detected, int_sts=%x fault_sts= %x\n",
 			int_sts, fault_sts);
+		BBOX_LED_OVP
+	}
 
 	if (fault_sts & QPNP_WLED_OVP_FAULT_BIT) {
 		if (wled->auto_calib_enabled && !wled->auto_calib_done) {
@@ -1373,6 +1379,7 @@ static irqreturn_t qpnp_wled_sc_irq_handler(int irq, void *_wled)
 
 	pr_err("WLED short circuit detected %d times fault_status=%x\n",
 		++wled->sc_cnt, val);
+	BBOX_LED_SC
 	mutex_lock(&wled->lock);
 	qpnp_wled_module_en(wled, wled->ctrl_base, false);
 	msleep(QPNP_WLED_SC_DLY_MS);

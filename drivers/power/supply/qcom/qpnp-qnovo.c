@@ -1471,6 +1471,13 @@ static int qnovo_hw_init(struct qnovo *chip)
 		return rc;
 	}
 
+	val = 0;
+	rc = qnovo_write(chip, QNOVO_STRM_CTRL, &val, 1);
+	if (rc < 0) {
+		pr_err("Couldn't write iadc bitstream control rc = %d\n", rc);
+		return rc;
+	}
+
 	rc = qnovo_read(chip, QNOVO_IADC_OFFSET_0, &iadc_offset_external, 1);
 	if (rc < 0) {
 		pr_err("Couldn't read iadc exernal offset rc = %d\n", rc);

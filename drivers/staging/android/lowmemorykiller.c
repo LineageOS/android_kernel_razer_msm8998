@@ -62,6 +62,8 @@
 #define CREATE_TRACE_POINTS
 #include "trace/lowmemorykiller.h"
 
+static uint32_t lmk_counter = 0;
+
 static uint32_t lowmem_debug_level = 1;
 static short lowmem_adj[6] = {
 	0,
@@ -572,6 +574,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		lowmem_deathpending_timeout = jiffies + HZ;
 		rem += selected_tasksize;
 		rcu_read_unlock();
+		lmk_counter++;
 		/* give the system time to free up the memory */
 		msleep_interruptible(20);
 		trace_almk_shrink(selected_tasksize, ret,
@@ -698,4 +701,5 @@ module_param_array_named(minfree, lowmem_minfree, uint, &lowmem_minfree_size,
 			 S_IRUGO | S_IWUSR);
 module_param_named(debug_level, lowmem_debug_level, uint, S_IRUGO | S_IWUSR);
 module_param_named(lmk_fast_run, lmk_fast_run, int, S_IRUGO | S_IWUSR);
+module_param_named(lmkcounter, lmk_counter, uint, S_IRUGO);
 

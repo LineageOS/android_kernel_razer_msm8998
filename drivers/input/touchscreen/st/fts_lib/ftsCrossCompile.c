@@ -23,21 +23,21 @@
 #include <linux/firmware.h>
 #include <linux/regulator/consumer.h>
 #include <linux/of_gpio.h>
-/* #include <linux/sec_sysfs.h> */
+//#include <linux/sec_sysfs.h>
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
 #include <linux/spi/spidev.h>
 #include <linux/fcntl.h>
 #include <linux/syscalls.h>
 
-/* static char tag[8]="[ FTS ]\0"; */
-void *stmalloc(size_t size)
-{
+//static char tag[8]="[ FTS ]\0";
+void* stmalloc(size_t size) {
 	return kmalloc(size, GFP_KERNEL);
 
 }
 
-void stfree(void *ptr)
-{
+void stfree(void *ptr) {
 	kfree(ptr);
 }
+
+

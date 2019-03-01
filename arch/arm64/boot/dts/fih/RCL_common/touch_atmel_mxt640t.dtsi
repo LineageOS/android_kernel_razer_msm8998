@@ -1,0 +1,52 @@
+&tlmm {
+	i2c_5 {
+		i2c_5_active: i2c_5_active {
+			mux {
+				pins = "gpio87", "gpio88";
+				function = "blsp_i2c5";
+			};
+			config {
+				pins = "gpio87", "gpio88";
+				drive-strength = <16>;
+				bias-pull-up;
+			};
+		};
+
+		i2c_5_sleep: i2c_5_sleep {
+			mux {
+				pins = "gpio87", "gpio88";
+				function = "blsp_i2c5";
+			};
+			config {
+				pins = "gpio87", "gpio88";
+				drive-strength = <16>;
+				bias-pull-up;
+			};
+		};
+	};
+};
+
+
+&i2c_5{
+	status = "okay";
+	 /delete-node/ atmel_mxt_ts@4a;
+	atmel_mxt_ts@4a {
+		compatible = "atmel,maxtouch";
+		reg = <0x4a>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <125 0x2008>;
+		vdd-supply = <&pm8998_l28>;
+		atmel,avdd-ldo-gpio = <&tlmm 21 0x00>;
+		//pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
+		//pinctrl-0 = <&ts_active>;
+		//pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		//pinctrl-0 = <&ts_active>;
+		//pinctrl-1 = <&ts_suspend>;
+		atmel,cfg_name = "SHARP_2017Apr12_1130_NoSync.raw";
+		atmel,panel-coords = <0 0 1919 1079>;
+		atmel,display-coords = <0 0 1919 1079>;
+		atmel,irq-gpio = <&tlmm 125 0x00>;
+		atmel,reset-gpio = <&tlmm 89 0x00>;
+		atmel,suspend-mode = <2>; 
+	};
+};

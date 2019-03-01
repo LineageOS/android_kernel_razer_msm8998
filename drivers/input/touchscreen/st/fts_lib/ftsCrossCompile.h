@@ -1,5 +1,5 @@
-/* #define NDK */
-/* #define DEBUG */
+//#define NDK
+#define DEBUG
 
 #include <linux/init.h>
 #include <linux/errno.h>
@@ -23,12 +23,12 @@
 #include <linux/firmware.h>
 #include <linux/regulator/consumer.h>
 #include <linux/of_gpio.h>
-/* #include <linux/sec_sysfs.h> */
+//#include <linux/sec_sysfs.h>
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
 #include <linux/spi/spidev.h>
 #include <linux/fcntl.h>
 #include <linux/syscalls.h>
 
-void *stmalloc(size_t size);
+void* stmalloc(size_t size);
 void stfree(void *ptr);

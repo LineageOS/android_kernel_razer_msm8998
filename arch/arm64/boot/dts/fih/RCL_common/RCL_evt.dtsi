@@ -1,0 +1,57 @@
+/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/* SYSTEM parts */
+/* GPIO parts */
+#include "pinctrl-msm8998-evt0_5.dtsi"
+#include "platform-msm8998-evt0_5.dtsi"
+
+/* Thermal */
+#include "fih_thermal.dtsi"
+
+/* Power */
+#include "fih_power_EVT1.dtsi"
+
+/* Memory */
+#include "fih_memmap_rcl_evb.dtsi"
+
+/* Display */
+#include "Display-nt36850.dtsi"
+/* Touch Panel */
+#include "touch_atmel_mxt640t.dtsi"
+/* Camera */
+#include "camera-evt0.dtsi"
+
+/* Audio */
+#include "audio-alsa-evt0.dtsi"
+/* Peripherals */
+
+/* Wireless */
+
+/* Sensor */
+
+/* LEDS */
+#include "rgb.dtsi"
+#include "keypad.dtsi"
+#include "vibrator.dtsi"
+
+/* USB */
+#include "usb-redriver.dtsi"
+
+/* FINGERPRINT */
+#include "fingerprint-fpc1235-evt1.dtsi"
+
+/* NFC, NXP PN547 */
+#include "nfc-nxp-pn547-evt1.dtsi"
+
+/* SD */
+#include "rcl_sd.dtsi"

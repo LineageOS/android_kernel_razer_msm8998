@@ -765,6 +765,10 @@ static int msm_isp_buf_done(struct msm_isp_buf_mgr *buf_mgr,
 		if (state == MSM_ISP_BUFFER_STATE_DEQUEUED) {
 			buf_info->state = MSM_ISP_BUFFER_STATE_DISPATCHED;
 			spin_unlock_irqrestore(&bufq->bufq_lock, flags);
+#if 0 //def CONFIG_FIH_9801
+		trace_printk("frameid: %d send buf done buf_index %d strmid: 0x%x bufq %x\n",
+			frame_id, buf_index, bufq->stream_id, bufq_handle);
+#endif
 			buf_mgr->vb2_ops->buf_done(buf_info->vb2_v4l2_buf,
 				bufq->session_id, bufq->stream_id,
 				frame_id, tv, output_format);

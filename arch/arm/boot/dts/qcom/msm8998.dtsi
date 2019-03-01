@@ -1,4 +1,6 @@
 /* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
+ * Copyright (C) 2017-2018 Paranoid Android.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,7 +36,7 @@
 
 	chosen {
 		stdout-path = "serial0";
-		bootargs = "rcupdate.rcu_expedited=1";
+		bootargs = "rcupdate.rcu_expedited=1 core_ctl_disable_cpumask=0-3";
 	};
 
 	cpus {
@@ -291,8 +293,16 @@
 					compatible = "android,vendor";
 					dev = "/dev/block/platform/soc/1da4000.ufshc/by-name/vendor";
 					type = "ext4";
-					mnt_flags = "ro,barrier=1,discard";
-					fsmgr_flags = "wait,slotselect";
+					mnt_flags = "ro,barrier=1";
+					fsmgr_flags = "wait,slotselect,verify";
+					status = "ok";
+				};
+				persist {
+					compatible = "android,persist";
+					dev = "/dev/block/platform/soc/1da4000.ufshc/by-name/persist";
+					type = "ext4";
+					mnt_flags = "nosuid,nodev,noatime,nodiratime,barrier=1";
+					fsmgr_flags = "wait";
 					status = "ok";
 				};
 			};
@@ -2325,6 +2335,14 @@
 			qcom,sensor-type = "llm";
 			qcom,sensor-name = "limits_sensor-02";
 		};
+		sensor_information30: qcom,sensor-information-30 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "xo_therm";
+		};
+		sensor_information31: qcom,sensor-information-31 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "ufs_therm";
+		};
 	};
 
 	qcom_seecom: qseecom@86600000 {
@@ -2493,7 +2511,7 @@
 		compatible = "qcom,msm-thermal";
 		qcom,sensor-id = <1>;
 		qcom,poll-ms = <100>;
-		qcom,therm-reset-temp = <115>;
+		qcom,therm-reset-temp = <104>; // alex.naidis@paranoidandroid.co Update to match spec
 		qcom,core-limit-temp = <70>;
 		qcom,core-temp-hysteresis = <10>;
 		qcom,hotplug-temp = <105>;
@@ -2765,12 +2783,14 @@
 		qcom,bcl-enable;
 		qcom,bcl-framework-interface;
 		qcom,bcl-freq-control-list = <&CPU4 &CPU5 &CPU6 &CPU7>;
-		qcom,bcl-hotplug-list = <&CPU4 &CPU5 &CPU6 &CPU7>;
-		qcom,bcl-soc-hotplug-list = <&CPU4 &CPU5 &CPU6 &CPU7>;
+		// alex.naidis@paranoidandroid.co Don't hotplug whole big cluster - start
+		qcom,bcl-hotplug-list = <&CPU6 &CPU7>;
+		qcom,bcl-soc-hotplug-list = <&CPU6 &CPU7>;
+		// alex.naidis@paranoidandroid.co Don't hotplug whole big cluster - end
 		qcom,ibat-monitor {
 			qcom,low-threshold-uamp = <3400000>;
 			qcom,high-threshold-uamp = <4200000>;
-			qcom,mitigation-freq-khz = <576000>;
+			qcom,mitigation-freq-khz = <979200>; // alex.naidis@paranoidandroid.co Adjust mitigation frequency
 			qcom,vph-high-threshold-uv = <3500000>;
 			qcom,vph-low-threshold-uv = <3300000>;
 			qcom,soc-low-threshold = <10>;
@@ -3065,7 +3085,7 @@
 		reg = <0x780000 0x1000>;
 		qcom,low-hyst-temp = <100>;
 		qcom,high-hyst-temp = <100>;
-		qcom,polling-interval = <50>;
+		qcom,polling-interval = <100>; // alex.naidis@paranoidandroid.co Change msm-core polling rate to 100ms
 
 		ea0: ea0 {
 			sensor = <&sensor_information1>;

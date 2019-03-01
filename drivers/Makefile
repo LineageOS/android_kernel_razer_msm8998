@@ -182,3 +182,7 @@ obj-$(CONFIG_BIF)		+= bif/
 
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 obj-$(CONFIG_ESOC)              += esoc/
+
+# FIH, add fih code { */
+obj-y += fih/
+# FIH, add fih code } */

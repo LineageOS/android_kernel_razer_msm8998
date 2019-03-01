@@ -1,0 +1,76 @@
+
+qcom,2930572_fih_rcl_4000mah_averaged_masterslave_jun12th2017 {
+	qcom, = <24>;
+	/* #2930572_FIH_RCL_4000mAh_averaged_MasterSlave_Jun12th2017*/
+	qcom,max-voltage-uv = <4400000>;
+	qcom,fg-cc-cv-threshold-mv = <4390>;
+	qcom,nom-batt-capacity-mah = <4000>;
+	qcom,fastchg-current-ma = <3900>;
+	qcom,batt-id-kohm = <240>;
+	qcom,battery-beta = <4085>;
+	qcom,battery-type = "2930572_fih_rcl_4000mah_averaged_masterslave_jun12th2017";
+	qcom,checksum = <0xDDF9>;
+	qcom,gui-version = "PMI8998GUI - 2.0.0.58";
+	/* Battery Tuning */
+	qcom,fg-jeita-thresholds = <0 15 45 55>;
+	fih,jeita-full-capacity-warm-en;
+	/* [END] */
+	qcom,fg-profile-data = [
+		 7B 1F 9E 05
+		 8A 0A 67 FC
+		 7C 1D DA F4
+		 59 12 16 14
+		 96 18 E8 22
+		 A7 45 94 52
+		 57 00 00 00
+		 0F 00 00 00
+		 00 00 EE AC
+		 4E CC BE C2
+		 18 00 08 00
+		 55 E3 75 ED
+		 1B FD D9 F3
+		 87 05 1A 1A
+		 E9 04 0A 32
+		 19 06 09 20
+		 27 00 14 00
+		 E1 1F 5C 05
+		 B0 0A 15 06
+		 61 1D 6A EA
+		 BF 0A 05 15
+		 35 19 AE 22
+		 CE 45 6D 52
+		 55 00 00 00
+		 0F 00 00 00
+		 00 00 F9 D5
+		 96 C2 0C C3
+		 17 00 00 00
+		 6D EB 75 ED
+		 61 FD E3 00
+		 D1 05 A7 02
+		 01 07 8B 1B
+		 B3 33 CC FF
+		 07 10 00 00
+		 E4 0F 66 46
+		 17 00 40 00
+		 7E 01 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};

@@ -1,13 +1,13 @@
 /*
 
 **************************************************************************
-**						STMicroelectronics						**
+**                        STMicroelectronics 		                **
 **************************************************************************
-**						marco.cali@st.com				**
+**                        marco.cali@st.com				**
 **************************************************************************
-*																		*
-*				  FTS Utility for mesuring/handling the time		 *
-*																		*
+*                                                                        *
+*                  FTS Utility for mesuring/handling the time		 *
+*                                                                        *
 **************************************************************************
 **************************************************************************
 
@@ -40,45 +40,41 @@
 #include <linux/firmware.h>
 #include <linux/regulator/consumer.h>
 #include <linux/of_gpio.h>
-/* #include <linux/sec_sysfs.h> */
+//#include <linux/sec_sysfs.h>
 
-void startStopWatch(StopWatch *w)
-{
+
+
+void startStopWatch(StopWatch *w) {
 	w->start = current_kernel_time();
 }
 
-void stopStopWatch(StopWatch *w)
-{
+void stopStopWatch(StopWatch *w) {
 	w->end = current_kernel_time();
 }
 
-int elapsedMillisecond(StopWatch *w)
-{
+int elapsedMillisecond(StopWatch *w) {
 	int result;
 
 	result = ((w->end.tv_sec - w->start.tv_sec)*1000) + (w->end.tv_nsec - w->start.tv_nsec) / 1000000;
 	return result;
 }
 
-int elapsedNanosecond(StopWatch *w)
-{
+int elapsedNanosecond(StopWatch *w) {
 	int result;
 
 	result = ((w->end.tv_sec - w->start.tv_sec)*1000000000) + (w->end.tv_nsec - w->start.tv_nsec);
 	return result;
 }
 
-char *timestamp(void)
-{
-	char *result = NULL;
+char* timestamp() {
+	char* result=NULL;
 	result = (char *)kmalloc((1)*sizeof(char), GFP_KERNEL);
-	if (result == NULL)
-		return NULL;
+	if (result == NULL) return NULL;
 	result[0] = ' ';
 	return result;
 }
 
 void stdelay(unsigned long ms)
 {
-	 msleep(ms);
+	 mdelay(ms);
 }
