@@ -1,0 +1,6 @@
+
+	fih_ddr {
+		compatible = "fih_ddr";
+		status = "ok";
+		fih-ddr,dramtest = "none";
+	};

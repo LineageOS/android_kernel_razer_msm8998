@@ -1,0 +1,263 @@
+/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+#include "dsi-panel-jdi-nt36850-dualmipi-cmd.dtsi"
+#include "dsi-panel-jdi-nt36850-dualmipi-video.dtsi"
+#include "dsi-panel-lgd-dualmipi-cmd.dtsi"
+#include "dsi-panel-nt35597-dualmipi-wqxga-cmd.dtsi"
+#include "dsi-panel-nt35597-dualmipi-wqxga-video.dtsi"
+#include "dsi-panel-nt36830-wqhd-dualmipi-cmd.dtsi"
+#include "dsi-panel-nt36830-wqhd-dualmipi-video.dtsi"
+
+&soc {
+	tlmm: pinctrl@03400000 {
+		pmx_mdss: pmx_mdss {
+			mdss_dsi_active: mdss_dsi_active {
+				mux {
+					pins = "gpio94";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio94";
+					drive-strength = <8>; /* 8 mA */
+					bias-disable; /* no pull */
+				};
+			};
+			mdss_dsi_suspend: mdss_dsi_suspend {
+				mux {
+					pins = "gpio94";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio94";
+					drive-strength = <2>; /* 2 mA */
+					bias-pull-down; /* pull down */
+				};
+			};
+		};
+
+		pmx_mdss_te {
+			mdss_te_active: mdss_te_active {
+				mux {
+					pins = "gpio10";
+					function = "mdp_vsync_a";
+				};
+				config {
+					pins = "gpio10";
+					drive-strength = <2>; /* 8 mA */
+					bias-pull-down; /* pull down*/
+				};
+			};
+
+			mdss_te_suspend: mdss_te_suspend {
+				mux {
+					pins = "gpio10";
+					function = "mdp_vsync_a";
+				};
+				config {
+					pins = "gpio10";
+					drive-strength = <2>; /* 2 mA */
+					bias-pull-down; /* pull down */
+				};
+			};
+		};
+	};
+};
+
+&pm8998_l6{
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+	status = "okay";
+};
+
+&pm8998_l14{
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+	status = "okay";
+};
+
+&ibb_regulator{
+	qcom,qpnp-ibb-init-lcd-voltage = <5800000>;
+	qcom,qpnp-ibb-init-voltage = <5800000>;
+	qcom,qpnp-ibb-enable-pfm-mode;
+	qcom,qpnp-ibb-pfm-peak-curr = <350>;
+	qcom,qpnp-ibb-pfm-hysteresis = <0>;
+};
+
+&lab_regulator{
+	qcom,qpnp-lab-init-lcd-voltage = <5800000>;
+	qcom,qpnp-lab-init-voltage = <5800000>;
+	qcom,qpnp-lab-enable-pfm-mode;
+};
+
+&mdss_dsi {
+	wqhd-vddio-supply = <&pm8998_l14>;
+	wqhd-vdd-supply = <&pm8998_l6>;
+	lab-supply = <&lab_regulator>;
+	ibb-supply = <&ibb_regulator>;
+	hw-config = "split_dsi";
+
+	qcom,phy-supply-entries {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,phy-supply-entry@0 {
+			/delete-property/qcom,supply-lp-mode-disable-allowed;
+		};
+	};
+
+};
+
+&soc {
+	/delete-node/dsi_panel_pwr_supply;
+
+	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "wqhd-vddio";
+			qcom,supply-min-voltage = <1800000>;
+			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-enable-load = <32000>;
+			qcom,supply-disable-load = <80>;
+		};
+
+		qcom,panel-supply-entry@1 {
+			reg = <1>;
+			qcom,supply-name = "ibb";
+			qcom,supply-min-voltage = <5800000>;
+			qcom,supply-max-voltage = <5800000>;
+			qcom,supply-enable-load = <100000>;
+			qcom,supply-disable-load = <100>;
+			qcom,supply-post-off-sleep = <5>;
+		};
+
+		qcom,panel-supply-entry@2 {
+			reg = <2>;
+			qcom,supply-name = "lab";
+			qcom,supply-min-voltage = <5800000>;
+			qcom,supply-max-voltage = <5800000>;
+			qcom,supply-enable-load = <100000>;
+			qcom,supply-disable-load = <100>;
+		};
+
+		qcom,panel-supply-entry@3 {
+			reg = <3>;
+			qcom,supply-name = "wqhd-vdd";
+			qcom,supply-min-voltage = <1800000>;
+			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-enable-load = <32000>;
+			qcom,supply-disable-load = <80>;
+			qcom,supply-post-on-sleep = <1>;
+			qcom,supply-post-off-sleep = <1>;
+		};
+	};
+};
+
+&mdss_dsi0 {
+	wqhd-vdd-supply = <&pm8998_l6>;
+
+	qcom,dsi-pref-prim-pan = <&dsi_nt36830_wqhd_dualdsi_cmd>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	qcom,platform-reset-gpio = <&tlmm 94 0>;
+	qcom,platform-te-gpio = <&tlmm 10 0>;
+};
+
+&mdss_dsi1 {
+	wqhd-vdd-supply = <&pm8998_l6>;
+
+	qcom,dsi-pref-prim-pan = <&dsi_nt36830_wqhd_dualdsi_cmd>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	qcom,platform-reset-gpio = <&tlmm 94 0>;
+	qcom,platform-te-gpio = <&tlmm 10 0>;
+};
+
+&pmi8998_wled {
+	qcom,led-strings-list = [00 01 02];
+	qcom,fs-curr-ua = <20000>;
+	qcom,switch-freq-khz = <1600>;
+	qcom,en-cabc;
+};
+
+&dsi_dual_nt35597_video {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-mode-sel-gpio-state = "dual_port";
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-panel-timings = [e2 36 24 00 66 6a 28 38 2a 03 04 00];
+	qcom,mdss-dsi-t-clk-post = <0x0d>;
+	qcom,mdss-dsi-t-clk-pre = <0x2d>;
+};
+
+&dsi_dual_nt35597_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-mode-sel-gpio-state = "dual_port";
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-panel-timings = [cd 32 22 00 60 64 26 34 29 03 04 00];
+	qcom,mdss-dsi-t-clk-post = <0x0d>;
+	qcom,mdss-dsi-t-clk-pre = <0x2d>;
+};
+
+&dsi_jdi_nt36850_dualmipi_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-panel-timings = [00 1d 06 07 0b 11 06 07 05 03 04 00];
+	qcom,mdss-dsi-t-clk-post = <0x28>;
+	qcom,mdss-dsi-t-clk-pre = <0x28>;
+};
+
+&dsi_jdi_nt36850_dualmipi_video {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,cmd-sync-wait-broadcast;
+	qcom,mdss-dsi-panel-timings = [00 1d 06 07 0b 11 06 07 05 03 04 00];
+	qcom,mdss-dsi-t-clk-post = <0x32>;
+	qcom,mdss-dsi-t-clk-pre = <0x2b>;
+};
+
+&lgd_wqxga_dualdsi_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,cmd-sync-wait-broadcast;
+	qcom,mdss-dsi-panel-timings = [00 1b 06 06 0b 11 06 0b 05 03 04 00];
+	qcom,mdss-dsi-t-clk-post = <7>;
+	qcom,mdss-dsi-t-clk-pre = <41>;
+};
+
+&mdss_hdmi_tx{
+       status = "disabled";
+};
+
+
+&dsi_sim_vid {
+       /delete-property/qcom,mdss-dsi-bl-pmic-control-type;
+       qcom,mdss-dsi-bl-min-level = <1>;
+       qcom,mdss-dsi-bl-max-level = <4095>;
+       qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};

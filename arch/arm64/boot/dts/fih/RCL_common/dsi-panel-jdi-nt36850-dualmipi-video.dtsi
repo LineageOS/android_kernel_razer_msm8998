@@ -1,0 +1,83 @@
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&mdss_mdp {
+	dsi_jdi_nt36850_dualmipi_video: qcom,mdss_dsi_jdi_wqxga_dualmipi_video {
+		qcom,mdss-dsi-panel-name = "JDI Dual nt36850 Video mode dsi panel without DSC";
+		qcom,mdss-dsi-panel-type = "dsi_video_mode";
+		qcom,mdss-dsi-panel-framerate = <57>;
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-panel-width = <720>;
+		qcom,mdss-dsi-panel-height = <2560>;
+		qcom,mdss-dsi-h-front-porch = <236>;
+		qcom,mdss-dsi-h-back-porch = <92>;
+		qcom,mdss-dsi-h-pulse-width = <32>;
+		qcom,mdss-dsi-h-sync-skew = <0>;
+		qcom,mdss-dsi-v-back-porch = <7>;
+		qcom,mdss-dsi-v-front-porch = <8>;
+		qcom,mdss-dsi-v-pulse-width = <1>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-underflow-color = <0xff>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,mdss-tear-check-sync-cfg-height= <2580>;
+		qcom,mdss-dsi-on-command = [
+			15 01 00 00 0a 00 02 ff 10
+			39 01 00 00 0a 00 03 51 ff 03
+			15 01 00 00 0a 00 02 53 2c
+			15 01 00 00 0a 00 02 35 00
+			39 01 00 00 0a 00 03 44 03 e8
+			15 01 00 00 0a 00 02 ff 10
+			15 01 00 00 0a 00 02 fb 01
+			39 01 00 00 0a 00 04 3b 03 08 08
+			15 01 00 00 0a 00 02 bb 13
+			05 01 00 00 64 00 01 11
+			05 01 00 00 a0 00 01 29
+		];
+
+		qcom,mdss-dsi-off-command = [
+			15 01 00 00 0a 00 02 ff 10
+			05 01 00 00 78 00 02 28 00
+			05 01 00 00 78 00 02 10 00
+		];
+
+		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-h-sync-pulse = <0>;
+		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+		//qcom,cmd-sync-wait-broadcast;
+		qcom,panel-ack-disabled;
+		qcom,mdss-dsi-panel-timings = [00 1d 06 07 0b 11 06 07 05 03 04 00];
+		qcom,mdss-dsi-t-clk-post = <0x28>;
+		qcom,mdss-dsi-t-clk-pre = <0x28>;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-reset-sequence = <1 10>, <0 10>, <1 10>;
+		qcom,mdss-dsi-lp11-init;
+
+		qcom,config-select = <&dsi_jdi_nt36850_dualmipi_video_config0>;
+
+		dsi_jdi_nt36850_dualmipi_video_config0: config0 {
+			qcom,split-mode = "dualctl-split";
+		};
+
+		dsi_jdi_nt36850_dualmipi_video_config1: config1 {
+			qcom,split-mode = "pingpong-split";
+		};
+	};
+};

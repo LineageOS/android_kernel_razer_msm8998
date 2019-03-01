@@ -1,0 +1,102 @@
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+qcom,fih-ms3-4v4-2650mah-240k {
+	qcom, = <24>;
+	/* #2538653_FIH_MS3_2630mAh_averaged_MasterSlave_Apr11th2017*/
+	qcom,nom-batt-capacity-mah = <2630>;
+	qcom,max-voltage-uv = <4400000>;
+	qcom,v-cutoff-uv = <3400000>;
+	qcom,chg-term-ua = <50000>;
+	qcom,batt-id-kohm = <240>;
+	qcom,battery-beta = <3435>;
+	qcom,battery-type = "2538653_fih_ms3_2630mah_240k_averaged_masterslave_apr11th2017";
+	qcom,cool-bat-decidegc = <150>;
+	qcom,hot-bat-decidegc = <550>;
+	qcom,fg-chg-iterm-ma = <50>;
+	qcom,chg-rslow-comp-c1 = <3129174>;
+	qcom,chg-rslow-comp-c2 = <4264160>;
+	qcom,chg-rs-to-rslow = <1010720>;
+	qcom,chg-rslow-comp-thr = <0xA2>;
+	qcom,fastchg-current-ma = <1800>;
+	qcom,fastchg-current-comp = <700>;
+	qcom,fg-cc-cv-threshold-mv = <4390>;
+	qcom,checksum = <0xF7F9>;
+	qcom,thermal-coefficients = [C5 86 BE 50 D1 37];
+	qcom,gui-version = "PMI8998GUI - 2.0.0.55";
+	/* Battery Tuning */
+	qcom,fg-jeita-thresholds = <0 20 50 55>;
+	fih,diff-jeita-fn;
+	qcom,jeita-fcc-comp-cool = <600000>;
+	qcom,jeita-fv-comp-cool = <0>;
+	qcom,jeita-fcc-comp-warm = <0>;
+	qcom,jeita-fv-comp-warm = <300000>;
+	/* [END] */
+	qcom,fg-profile-data = [
+		 C7 1F 38 05
+		 E0 0A D9 05
+		 57 1D 89 E5
+		 C3 0A D3 15
+		 53 18 D1 22
+		 E8 45 1C 52
+		 5D 00 00 00
+		 0F 00 00 00
+		 00 00 27 B2
+		 19 CD D1 BA
+		 25 00 08 00
+		 05 E3 27 E4
+		 D2 05 9D FA
+		 9F 05 71 12
+		 27 F4 61 32
+		 1F 06 09 20
+		 27 00 14 00
+		 2E 20 01 05
+		 FD 0A C3 05
+		 41 1D F0 00
+		 9B FB 4E 0D
+		 0C 19 E4 22
+		 85 45 E5 52
+		 59 00 00 00
+		 0D 00 00 00
+		 00 00 6C D5
+		 13 AB 05 D2
+		 1B 00 00 00
+		 57 EA 27 E4
+		 7B 06 D7 00
+		 6A 07 D5 0A
+		 CC E4 8B 1A
+		 A2 33 CC FF
+		 07 10 00 00
+		 DD 0A 66 46
+		 1B 00 40 00
+		 13 02 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};

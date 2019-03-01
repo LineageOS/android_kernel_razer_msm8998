@@ -1,0 +1,38 @@
+&soc {
+	gpio_keys {
+		/delete-node/ vol_up;
+		vol_down {
+			label = "volume_down";
+			gpios = <&pm8998_gpios 10 0x1>;
+			linux,input-type = <1>;
+			linux,code = <114>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+		/delete-node/ home;
+		/delete-node/ cam_snapshot;
+		/delete-node/ cam_focus;
+	};
+};
+&pm8998_gpios {
+	/* GPIO 10 for Vol- Key */
+	gpio@c900 {
+		status = "okay";
+		qcom,mode = <0>;
+		qcom,pull = <0>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <0>;
+		qcom,out-strength = <1>;
+	};
+};
+
+&spmi_bus {
+	qcom,pm8998@0 {
+		qcom,power-on@800 {
+			/* PON: RESIN */
+			qcom,pon_2 {
+				linux,code = <115>;
+			};
+		};
+	};
+};

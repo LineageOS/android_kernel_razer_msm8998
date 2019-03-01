@@ -1,0 +1,18 @@
+&soc {
+	fpc1020 {
+		compatible = "fpc,fpc1020";
+		status = "ok";
+		interrupt-parent = <&tlmm>;
+		interrupts = <121 0>;
+		fpc,gpio_rst    = <&tlmm 37 0x0>;
+		fpc,gpio_irq    = <&tlmm 121 0x0>;
+
+		pinctrl-names = "fpc1020_reset_reset",
+			"fpc1020_reset_active",
+			"fpc1020_irq_active";
+
+		pinctrl-0 = <&msm8998_gpio37_default>;
+		pinctrl-1 = <&msm8998_gpio37_active>;
+		pinctrl-2 = <&msm8998_gpio121_default>;
+	};
+};
