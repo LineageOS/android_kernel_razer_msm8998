@@ -145,6 +145,12 @@ msm8998-qrd-overlay.dtbo-base :=  msm8998-qrd.dtb
 msm8998-qrd-vr1-overlay.dtbo-base :=  msm8998-qrd-vr1.dtb
 msm8998-qrd-skuk-overlay.dtbo-base :=  msm8998-qrd-skuk.dtb
 else
+
+ifeq ($(CONFIG_MACH_RAZER_MSM8998),y)
+dtb-$(CONFIG_ARCH_MSM8998) += \
+	msm8998-v2.1-mtp-cheryl-pvt.dtb \
+	msm8998-v2.1-mtp-cheryl-mp.dtb
+else
 dtb-$(CONFIG_ARCH_MSM8998) += msm8998-sim.dtb \
 	msm8998-rumi.dtb \
 	msm8998-cdp.dtb \
@@ -179,6 +185,8 @@ dtb-$(CONFIG_ARCH_MSM8998) += msm8998-sim.dtb \
 	msm8998-v2.1-interposer-sdm660-cdp.dtb \
 	msm8998-v2.1-interposer-sdm660-mtp.dtb \
 	msm8998-v2.1-interposer-sdm660-qrd.dtb
+endif
+
 endif
 
 dtb-$(CONFIG_ARCH_MSMHAMSTER) += msmhamster-rumi.dtb
