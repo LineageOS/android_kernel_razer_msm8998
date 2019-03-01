@@ -3613,6 +3613,10 @@ static void mdss_dp_reset_sw_state(struct mdss_dp_drv_pdata *dp)
 	complete_all(&dp->notification_comp);
 }
 
+#ifdef CONFIG_USB_TUSB544
+extern int tusb544_notify_dp_status(bool connected);
+#endif
+
 static void usbpd_connect_callback(struct usbpd_svid_handler *hdlr)
 {
 	struct mdss_dp_drv_pdata *dp_drv;
@@ -3629,6 +3633,9 @@ static void usbpd_connect_callback(struct usbpd_svid_handler *hdlr)
 
 	if (dp_drv->hpd)
 		dp_send_events(dp_drv, EV_USBPD_DISCOVER_MODES);
+	#ifdef CONFIG_USB_TUSB544
+	tusb544_notify_dp_status(true);
+	#endif
 }
 
 static void usbpd_disconnect_callback(struct usbpd_svid_handler *hdlr)
@@ -3680,6 +3687,10 @@ static void usbpd_disconnect_callback(struct usbpd_svid_handler *hdlr)
 	 */
 	if ((!dp_drv->power_on) && (dp_drv->dp_initialized))
 		mdss_dp_host_deinit(dp_drv);
+
+	#ifdef CONFIG_USB_TUSB544
+	tusb544_notify_dp_status(false);
+	#endif
 }
 
 static int mdss_dp_validate_callback(u8 cmd,

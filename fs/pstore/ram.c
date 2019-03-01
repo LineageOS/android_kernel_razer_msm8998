@@ -623,7 +623,7 @@ static int ramoops_probe(struct platform_device *pdev)
 
 	cxt->size = pdata->mem_size;
 	cxt->phys_addr = pdata->mem_address;
-	cxt->memtype = pdata->mem_type;
+	cxt->memtype = pdata->mem_type;	//Code Aurora's patch
 	cxt->record_size = pdata->record_size;
 	cxt->console_size = pdata->console_size;
 	cxt->ftrace_size = pdata->ftrace_size;
@@ -683,6 +683,7 @@ static int ramoops_probe(struct platform_device *pdev)
 	 */
 	mem_size = pdata->mem_size;
 	mem_address = pdata->mem_address;
+	mem_type = pdata->mem_type;
 	record_size = pdata->record_size;
 	dump_oops = pdata->dump_oops;
 	ramoops_console_size = pdata->console_size;
