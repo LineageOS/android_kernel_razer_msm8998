@@ -106,6 +106,10 @@ static ssize_t power_supply_show_property(struct device *dev,
 
 	if (off == POWER_SUPPLY_PROP_STATUS)
 		return sprintf(buf, "%s\n", status_text[value.intval]);
+	//{Device was discharging when battery capacity is above 60% and temperature is warm.
+	else if (off == POWER_SUPPLY_PROP_STATUS_INTERNAL)
+		return sprintf(buf, "%s\n", status_text[value.intval]);
+	//}Device was discharging when battery capacity is above 60% and temperature is warm.
 	else if (off == POWER_SUPPLY_PROP_CHARGE_TYPE)
 		return sprintf(buf, "%s\n", charge_type[value.intval]);
 	else if (off == POWER_SUPPLY_PROP_HEALTH)
@@ -163,6 +167,7 @@ static ssize_t power_supply_store_property(struct device *dev,
 static struct device_attribute power_supply_attrs[] = {
 	/* Properties of type `int' */
 	POWER_SUPPLY_ATTR(status),
+	POWER_SUPPLY_ATTR(status_internal), //Device was discharging when battery capacity is above 60% and temperature is warm.
 	POWER_SUPPLY_ATTR(charge_type),
 	POWER_SUPPLY_ATTR(health),
 	POWER_SUPPLY_ATTR(present),
@@ -251,6 +256,10 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(temp_hot),
 	POWER_SUPPLY_ATTR(system_temp_level),
 	POWER_SUPPLY_ATTR(resistance),
+	/* WayneWCShiue - 9801-7860 - Add more log for debug */
+	POWER_SUPPLY_ATTR(resistance_esr),
+	POWER_SUPPLY_ATTR(resistance_rslow),
+	/* end 9801-7860 */
 	POWER_SUPPLY_ATTR(resistance_capacitive),
 	POWER_SUPPLY_ATTR(resistance_id),
 	POWER_SUPPLY_ATTR(resistance_now),
@@ -288,6 +297,27 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(parallel_disable),
 	POWER_SUPPLY_ATTR(pe_start),
 	POWER_SUPPLY_ATTR(set_ship_mode),
+	/* WayneWCShiue - 9801-3730 - Change JEITA dynamically */
+	POWER_SUPPLY_ATTR(jeita_diff_fn_en),
+	POWER_SUPPLY_ATTR(jeita_fcc_cool),
+	POWER_SUPPLY_ATTR(jeita_fcc_warm),
+	POWER_SUPPLY_ATTR(jeita_fv_cool),
+	POWER_SUPPLY_ATTR(jeita_fv_warm),
+	/* end 9801-3730 */
+	/* WayneWCShiue - 9801-8555 - [BAT] Inform Battery Protect AP once the battery can only charge to 4.1V */
+	POWER_SUPPLY_ATTR(jeita_full_capacity_status),
+	POWER_SUPPLY_ATTR(jeita_full_capacity_warm_en),
+	POWER_SUPPLY_ATTR(jeita_full_capacity_cool_en),
+	/* end 9801-8555 */
+	/* WayneWCShiue - 9802-799 - Implement the WLC FCC adjust mechansim */
+	POWER_SUPPLY_ATTR(fih_wlc_fcc_en),
+	/* end 9802-799 */
+	/* WayneWCShiue - 9802-1713 - Add periodical checker mechanism for charging */
+	POWER_SUPPLY_ATTR(fih_period_checker),
+	/* end 9802-1713 */
+	/* WayneWCShiue - 9801-6414 - Add battery event for problem report */
+	POWER_SUPPLY_ATTR(monitor_event),
+	/* end 9801-6414 */
 	POWER_SUPPLY_ATTR(soc_reporting_ready),
 	POWER_SUPPLY_ATTR(debug_battery),
 	POWER_SUPPLY_ATTR(fcc_delta),

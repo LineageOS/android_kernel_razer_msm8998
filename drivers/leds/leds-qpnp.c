@@ -561,6 +561,7 @@ struct qpnp_led_data {
 static DEFINE_MUTEX(flash_lock);
 static struct pwm_device *kpdbl_master;
 static u32 kpdbl_master_period_us;
+static int *gduty_pcts; //[LED]Workaround LED pwm init parameter restore solid conditions during qpnp_rgb_set and PWM mode.
 DECLARE_BITMAP(kpdbl_leds_in_use, NUM_KPDBL_LEDS);
 static bool is_kpdbl_master_turn_on;
 
@@ -1708,6 +1709,7 @@ static int qpnp_kpdbl_set(struct qpnp_led_data *led)
 	return 0;
 }
 
+static int qpnp_pwm_init(struct pwm_config_data *pwm_cfg, struct platform_device *pdev, const char *name); //[LED]Workaround LED pwm init parameter restore solid conditions during qpnp_rgb_set and PWM mode.
 static int qpnp_rgb_set(struct qpnp_led_data *led)
 {
 	int rc;
@@ -1718,14 +1720,6 @@ static int qpnp_rgb_set(struct qpnp_led_data *led)
 			led->rgb_cfg->pwm_cfg->mode =
 				led->rgb_cfg->pwm_cfg->default_mode;
 		if (led->rgb_cfg->pwm_cfg->mode == PWM_MODE) {
-			rc = pwm_change_mode(led->rgb_cfg->pwm_cfg->pwm_dev,
-					PM_PWM_MODE_PWM);
-			if (rc < 0) {
-				dev_err(&led->pdev->dev,
-					"Failed to set PWM mode, rc = %d\n",
-					rc);
-				return rc;
-			}
 			period_us = led->rgb_cfg->pwm_cfg->pwm_period_us;
 			if (period_us > INT_MAX / NSEC_PER_USEC) {
 				duty_us = (period_us * led->cdev.brightness) /
@@ -1747,6 +1741,13 @@ static int qpnp_rgb_set(struct qpnp_led_data *led)
 					"pwm config failed\n");
 				return rc;
 			}
+			//{[LED]Workaround LED pwm init parameter restore solid conditions during qpnp_rgb_set and PWM mode.
+			rc = qpnp_pwm_init(led->rgb_cfg->pwm_cfg, led->pdev, led->cdev.name);
+			if (rc) {
+				dev_err(&led->pdev->dev, "Failed to initialize pwm\n");
+				return rc;
+			}
+			//}[LED]Workaround LED pwm init parameter restore solid conditions during qpnp_rgb_set and PWM mode.
 		}
 		rc = qpnp_led_masked_write(led,
 			RGB_LED_EN_CTL(led->base),
@@ -2129,6 +2130,7 @@ static int qpnp_pwm_init(struct pwm_config_data *pwm_cfg,
 					const char *name)
 {
 	int rc, start_idx, idx_len, lut_max_size;
+	int i; //[LED]Workaround LED pwm init parameter restore solid conditions during qpnp_rgb_set and PWM mode.
 
 	if (pwm_cfg->pwm_dev) {
 		if (pwm_cfg->mode == LPG_MODE) {
@@ -2152,6 +2154,13 @@ static int qpnp_pwm_init(struct pwm_config_data *pwm_cfg,
 				dev_err(&pdev->dev, "Exceed LUT limit\n");
 				return -EINVAL;
 			}
+
+			//{[LED]Workaround LED pwm init parameter restore solid conditions during qpnp_rgb_set and PWM mode.
+			for (i = 0; i < pwm_cfg->duty_cycles->num_duty_pcts; i++){
+				pwm_cfg->duty_cycles->duty_pcts[i] =
+					gduty_pcts[i];
+			}
+			//}[LED]Workaround LED pwm init parameter restore solid conditions during qpnp_rgb_set and PWM mode.
 			rc = pwm_lut_config(pwm_cfg->pwm_dev,
 				pwm_cfg->pwm_period_us,
 				pwm_cfg->duty_cycles->duty_pcts,
@@ -2160,12 +2169,25 @@ static int qpnp_pwm_init(struct pwm_config_data *pwm_cfg,
 				dev_err(&pdev->dev, "Failed to configure pwm LUT\n");
 				return rc;
 			}
-			rc = pwm_change_mode(pwm_cfg->pwm_dev, PM_PWM_MODE_LPG);
+		}
+		//{[LED]Workaround LED pwm init parameter restore solid conditions during qpnp_rgb_set and PWM mode.
+		else if( pwm_cfg->mode == PWM_MODE)
+		{
+			//pr_info("[maoyi]%s PWM_MODE \n", __func__);
+			for (i=0; i < pwm_cfg->duty_cycles->num_duty_pcts; i++)
+			{
+				pwm_cfg->duty_cycles->duty_pcts[i] = gduty_pcts[4];
+			}
+			rc = pwm_lut_config(pwm_cfg->pwm_dev,
+				pwm_cfg->pwm_period_us,
+				pwm_cfg->duty_cycles->duty_pcts,
+				pwm_cfg->lut_params);
 			if (rc < 0) {
-				dev_err(&pdev->dev, "Failed to set LPG mode\n");
+				dev_err(&pdev->dev, "Failed to configure pwm LUT\n");
 				return rc;
 			}
 		}
+		//}[LED]Workaround LED pwm init parameter restore solid conditions during qpnp_rgb_set and PWM mode.
 	} else {
 		dev_err(&pdev->dev, "Invalid PWM device\n");
 		return -EINVAL;
@@ -3516,12 +3538,26 @@ static int qpnp_get_config_pwm(struct pwm_config_data *pwm_cfg,
 			goto bad_lpg_params;
 		}
 
+		//{[LED]Workaround LED pwm init parameter restore solid conditions during qpnp_rgb_set and PWM mode.
+		gduty_pcts = devm_kzalloc(&pdev->dev,
+				sizeof(int) * lut_max_size, GFP_KERNEL);
+		if (!gduty_pcts) {
+			dev_err(&pdev->dev, "Failed to allocate memory for gduty_pcts\n");
+			rc = -ENOMEM;
+			goto bad_lpg_params;
+		}
+		//}[LED]Workaround LED pwm init parameter restore solid conditions during qpnp_rgb_set and PWM mode.
+
 		memcpy(temp_cfg, prop->value,
 			pwm_cfg->duty_cycles->num_duty_pcts);
 
-		for (i = 0; i < pwm_cfg->duty_cycles->num_duty_pcts; i++)
+		//{[LED]Workaround LED pwm init parameter restore solid conditions during qpnp_rgb_set and PWM mode.
+		for (i = 0; i < pwm_cfg->duty_cycles->num_duty_pcts; i++){
 			pwm_cfg->duty_cycles->duty_pcts[i] =
 				(int) temp_cfg[i];
+			gduty_pcts[i] = (int) temp_cfg[i];
+		}
+		//}[LED]Workaround LED pwm init parameter restore solid conditions during qpnp_rgb_set and PWM mode.
 
 		rc = of_property_read_u32(node, "qcom,start-idx", &val);
 		if (!rc) {

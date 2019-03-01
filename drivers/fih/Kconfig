@@ -6,12 +6,6 @@ menu "Device Drivers for FIH"
   	help
   	  support fih 9801 project
 
-  config FIH_9802
-  	bool "FIH 9802 project"
-  	default n
-  	help
-  	  support fih 9802 project
-
   config FIH_RCL
   	bool "FIH RCL project"
   	default n
