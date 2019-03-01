@@ -1,0 +1,9 @@
+config FINGERPRINT_FPC1020_TEE
+	tristate "FPC1020 fingerprint reader"
+	depends on INPUT_FINGERPRINT
+	help
+	  Say Y here to enable fingerprint sensor support.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here.
