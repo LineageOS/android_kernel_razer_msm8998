@@ -842,6 +842,19 @@ static int32_t msm_actuator_park_lens(struct msm_actuator_ctrl_t *a_ctrl)
 		a_ctrl->park_lens.max_step = a_ctrl->max_code_size;
 
 	next_lens_pos = a_ctrl->step_position_table[a_ctrl->curr_step_pos];
+
+#ifdef CONFIG_MACH_RCL
+	// DAC data size is 10 bits, value = 0~1024
+	if ((next_lens_pos < 0) || (next_lens_pos > 1024)) {
+		int new_lens_pos = 0;
+		if (next_lens_pos > 1024)
+			new_lens_pos = 1024;
+		pr_err("Cam_%d: Change next_lens_pos from %d to %d \n",
+			a_ctrl->cam_name, next_lens_pos, new_lens_pos);
+		next_lens_pos = new_lens_pos;
+	}
+#endif
+
 	while (next_lens_pos) {
 		/* conditions which help to reduce park lens time */
 		if (next_lens_pos > (a_ctrl->park_lens.max_step *
