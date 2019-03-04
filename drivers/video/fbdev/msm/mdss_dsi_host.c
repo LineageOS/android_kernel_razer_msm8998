@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1028,10 +1029,23 @@ void mdss_dsi_controller_cfg(int enable,
 		pr_info("%s: FIFO status=%x failed\n", __func__, status);
 
 	/* Check for VIDEO_MODE_ENGINE_BUSY */
+#ifdef CONFIG_MACH_RCL
+	/*
+	 * Timeout happens a lot here.
+	 * Based on my analysis, resetting the DSI has no impact on mode
+	 * mode switch.  So reduce the timeout significantly to improve
+	 * the mode switching time.
+	 */
+	if (readl_poll_timeout(((ctrl_pdata->ctrl_base) + 0x0008),
+			   status,
+			   ((status & 0x08) == 0),
+			       sleep_us, 8000)) {
+#else
 	if (readl_poll_timeout(((ctrl_pdata->ctrl_base) + 0x0008),
 			   status,
 			   ((status & 0x08) == 0),
 			       sleep_us, timeout_us)) {
+#endif
 		pr_debug("%s: DSI status=%x\n", __func__, status);
 		pr_debug("%s: Doing sw reset\n", __func__);
 		mdss_dsi_sw_reset(ctrl_pdata, false);

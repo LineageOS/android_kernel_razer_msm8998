@@ -632,8 +632,17 @@ static int mdss_mdp_avr_validate(struct msm_fb_data_type *mfd,
 	}
 
 	if (!ctl->is_video_mode) {
+#ifdef CONFIG_MACH_RCL
+		if (pinfo->mipi.boot_mode == 0 /* VIDEO_MODE */) {
+			commit->flags &= ~MDP_COMMIT_AVR_EN;
+		} else {
+			pr_err("AVR not supported in command mode\n");
+			return -EINVAL;
+		}
+#else
 		pr_err("AVR not supported in command mode\n");
 		return -EINVAL;
+#endif
 	}
 
 	return req;
@@ -644,6 +653,10 @@ static void __update_avr_info(struct mdss_mdp_ctl *ctl,
 {
 	if (commit->flags & MDP_COMMIT_AVR_EN)
 		ctl->avr_info.avr_enabled = true;
+#ifdef CONFIG_MACH_RCL
+	else
+		ctl->avr_info.avr_enabled = false;
+#endif
 
 	ctl->avr_info.avr_mode = MDSS_MDP_AVR_CONTINUOUS;
 
