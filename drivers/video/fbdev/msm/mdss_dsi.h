@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -394,6 +395,14 @@ struct dsi_err_container {
 	s64 err_time[MAX_ERR_INDEX];
 };
 
+#ifdef CONFIG_MACH_RCL
+struct refresh_rate_config {
+	struct dsi_panel_cmds config_cmds;
+	u32 rate;
+	bool enabled;
+};
+#endif
+
 #define DSI_CTRL_LEFT		DSI_CTRL_0
 #define DSI_CTRL_RIGHT		DSI_CTRL_1
 #define DSI_CTRL_CLK_SLAVE	DSI_CTRL_RIGHT
@@ -425,6 +434,9 @@ struct mdss_dsi_ctrl_pdata {
 	int (*check_read_status) (struct mdss_dsi_ctrl_pdata *pdata);
 	int (*cmdlist_commit)(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp);
 	void (*switch_mode) (struct mdss_panel_data *pdata, int mode);
+#ifdef CONFIG_MACH_RCL
+	int (*refresh_rate_ctl) (struct mdss_panel_data *pdata, int rate);
+#endif
 	struct mdss_panel_data panel_data;
 	unsigned char *ctrl_base;
 	struct dss_io_data ctrl_io;
@@ -591,6 +603,10 @@ struct mdss_dsi_ctrl_pdata {
 	bool update_phy_timing; /* flag to recalculate PHY timings */
 
 	bool phy_power_off;
+
+#ifdef CONFIG_MACH_RCL
+	struct refresh_rate_config refresh_rate_cfg;
+#endif
 };
 
 struct dsi_status_data {

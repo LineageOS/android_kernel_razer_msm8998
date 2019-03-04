@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -33,7 +34,11 @@
 #define POLL_TIME_USEC_FOR_LN_CNT 500
 
 /* Filter out input events for 1 vsync time after receiving an input event*/
+#ifdef CONFIG_MACH_RCL
+#define INPUT_EVENT_HANDLER_DELAY_USECS 8000
+#else
 #define INPUT_EVENT_HANDLER_DELAY_USECS 16000
+#endif
 
 enum {
 	MDP_INTF_INTR_PROG_LINE,
@@ -82,7 +87,9 @@ struct mdss_mdp_video_ctx {
 
 	atomic_t vsync_ref;
 	spinlock_t vsync_lock;
+#ifndef CONFIG_MACH_RCL
 	spinlock_t dfps_lock;
+#endif
 	struct mutex vsync_mtx;
 	struct list_head vsync_handlers;
 	struct mdss_intf_recovery intf_recovery;
@@ -464,13 +471,23 @@ static int mdss_mdp_video_wait_one_frame(struct mdss_mdp_ctl *ctl)
 		frame_rate = DEFAULT_FRAME_RATE;
 	} else {
 		frame_rate = mdss_panel_get_framerate(&pdata->panel_info);
+#ifdef CONFIG_MACH_RCL
+		// Note: We shouldn't have to wait for longer than 48Hz.
+		if (!(frame_rate >= 48 && frame_rate <= 240))
+			frame_rate = 48;
+#else
 		if (!(frame_rate >= 24 && frame_rate <= 240))
 			frame_rate = 24;
+#endif
 	}
 
 	frame_time = ((1000/frame_rate) + 1);
 
+#ifdef CONFIG_MACH_RCL
+	mdelay(frame_time);
+#else
 	msleep(frame_time);
+#endif
 
 	return ret;
 }
@@ -491,11 +508,19 @@ static void mdss_mdp_video_avr_vtotal_setup(struct mdss_mdp_ctl *ctl,
 				p->h_back_porch + p->width + p->h_front_porch;
 			u32 vsync_period = p->vsync_pulse_width +
 				p->v_back_porch + p->height + p->v_front_porch;
+#ifdef CONFIG_MACH_RCL
+			u32 avr_min_fps = pinfo->avr_min_fps;
+			u32 default_fps = mdss_panel_get_framerate(pinfo);
+			u32 diff_fps = abs(default_fps - avr_min_fps);
+			u32 vtotal = mdss_panel_get_vtotal(pinfo);
+			int add_porches = mult_frac(vtotal, diff_fps, avr_min_fps);
+#else
 			u32 min_fps = pinfo->min_fps;
 			u32 default_fps = mdss_panel_get_framerate(pinfo);
 			u32 diff_fps = abs(default_fps - min_fps);
 			u32 vtotal = mdss_panel_get_vtotal(pinfo);
 			int add_porches = mult_frac(vtotal, diff_fps, min_fps);
+#endif
 			u32 vsync_period_slow = vsync_period + add_porches;
 
 			avr_vtotal = vsync_period_slow * hsync_period;
@@ -512,7 +537,11 @@ static void mdss_mdp_video_avr_vtotal_setup(struct mdss_mdp_ctl *ctl,
 
 		ctx->timegen_flush_pending = true;
 
+#ifdef CONFIG_MACH_RCL
+		MDSS_XLOG(pinfo->avr_min_fps, pinfo->default_fps, avr_vtotal);
+#else
 		MDSS_XLOG(pinfo->min_fps, pinfo->default_fps, avr_vtotal);
+#endif
 	}
 }
 
@@ -967,19 +996,56 @@ end:
 void mdss_mdp_turn_off_time_engine(struct mdss_mdp_ctl *ctl,
 		struct mdss_mdp_video_ctx *ctx, u32 sleep_time)
 {
+#ifdef CONFIG_MACH_RCL
+	struct mdss_mdp_video_ctx *sctx = NULL;
+#endif
 	struct mdss_mdp_ctl *sctl;
 
+#ifdef CONFIG_MACH_RCL
+	MDSS_XLOG(ctl->num, ctx->intf_num);
+
+	sctl = mdss_mdp_get_split_ctl(ctl);
+	if (sctl) {
+		sctx = (struct mdss_mdp_video_ctx *) sctl->intf_ctx[MASTER_CTX];
+		if (!sctx) {
+			pr_err("invalid sctx\n");
+			sctl = NULL;
+		}
+	} else if (is_pingpong_split(ctl->mfd)) {
+		sctx = (struct mdss_mdp_video_ctx *) ctl->intf_ctx[SLAVE_CTX];
+		if (!sctx || !sctx->ref_cnt) {
+			pr_err("invalid sctx or interface is powered off\n");
+			sctl = NULL;
+		}
+	}
+#endif
+
 	mdp_video_write(ctx, MDSS_MDP_REG_INTF_TIMING_ENGINE_EN, 0);
+#ifdef CONFIG_MACH_RCL
+	if (sctl)
+		mdp_video_write(sctx, MDSS_MDP_REG_INTF_TIMING_ENGINE_EN, 0);
+	wmb();
+
+	/* wait for at least one VSYNC for proper TG OFF */
+	udelay(sleep_time * 1000);
+#else
 	/* wait for at least one VSYNC for proper TG OFF */
 	msleep(sleep_time);
+#endif
 
 	mdss_iommu_ctrl(0);
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 	ctx->timegen_en = false;
+#ifdef CONFIG_MACH_RCL
+	if (sctl)
+		sctx->timegen_en = false;
+#endif
 
 	mdss_mdp_irq_disable(MDSS_MDP_IRQ_TYPE_INTF_UNDER_RUN, ctl->intf_num);
 
+#ifndef CONFIG_MACH_RCL
 	sctl = mdss_mdp_get_split_ctl(ctl);
+#endif
 	if (sctl)
 		mdss_mdp_irq_disable(MDSS_MDP_IRQ_TYPE_INTF_UNDER_RUN,
 			sctl->intf_num);
@@ -1003,8 +1069,13 @@ static int mdss_mdp_video_ctx_stop(struct mdss_mdp_ctl *ctl,
 		WARN(rc, "intf %d blank error (%d)\n", ctl->intf_num, rc);
 
 		frame_rate = mdss_panel_get_framerate(pinfo);
+#ifdef CONFIG_MACH_RCL
+		if (!(frame_rate >= 30 && frame_rate <= 240))
+			frame_rate = 30;
+#else
 		if (!(frame_rate >= 24 && frame_rate <= 240))
 			frame_rate = 24;
+#endif
 
 		frame_rate = (1000/frame_rate) + 1;
 		mdss_mdp_turn_off_time_engine(ctl, ctx, frame_rate);
@@ -1282,6 +1353,7 @@ static void mdss_mdp_video_underrun_intr_done(void *arg)
 		schedule_work(&ctl->recover_work);
 }
 
+#ifndef CONFIG_MACH_RCL
 /**
  * mdss_mdp_video_hfp_fps_update() - configure mdp with new fps.
  * @ctx: pointer to the master context.
@@ -1644,10 +1716,15 @@ end:
 	mutex_unlock(&ctl->offlock);
 	return rc;
 }
+#endif
 
 static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
 {
+#ifdef CONFIG_MACH_RCL
+	struct mdss_mdp_video_ctx *ctx, *sctx = NULL;
+#else
 	struct mdss_mdp_video_ctx *ctx;
+#endif
 	struct mdss_mdp_ctl *sctl;
 	struct mdss_panel_data *pdata = ctl->panel_data;
 	int rc;
@@ -1659,6 +1736,23 @@ static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
 		pr_err("invalid ctx\n");
 		return -ENODEV;
 	}
+
+#ifdef CONFIG_MACH_RCL
+	sctl = mdss_mdp_get_split_ctl(ctl);
+	if (sctl) {
+		sctx = (struct mdss_mdp_video_ctx *) sctl->intf_ctx[MASTER_CTX];
+		if (!sctx) {
+			pr_err("invalid sctx\n");
+			sctl = NULL;
+		}
+	} else if (is_pingpong_split(ctl->mfd)) {
+		sctx = (struct mdss_mdp_video_ctx *) ctl->intf_ctx[SLAVE_CTX];
+		if (!sctx || !sctx->ref_cnt) {
+			pr_err("invalid sctx or interface is powered off\n");
+			sctl = NULL;
+		}
+	}
+#endif
 
 	if (!ctx->wait_pending) {
 		ctx->wait_pending++;
@@ -1703,7 +1797,9 @@ static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
 
 		mdss_mdp_irq_enable(MDSS_MDP_IRQ_TYPE_INTF_UNDER_RUN,
 				ctl->intf_num);
+#ifndef CONFIG_MACH_RCL
 		sctl = mdss_mdp_get_split_ctl(ctl);
+#endif
 		if (sctl)
 			mdss_mdp_irq_enable(MDSS_MDP_IRQ_TYPE_INTF_UNDER_RUN,
 				sctl->intf_num);
@@ -1721,6 +1817,10 @@ static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
 		}
 
 		mdp_video_write(ctx, MDSS_MDP_REG_INTF_TIMING_ENGINE_EN, 1);
+#ifdef CONFIG_MACH_RCL
+		if (sctl)
+			mdp_video_write(sctx, MDSS_MDP_REG_INTF_TIMING_ENGINE_EN, 1);
+#endif
 		wmb();
 
 		rc = wait_for_completion_timeout(&ctx->vsync_comp,
@@ -1729,6 +1829,10 @@ static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
 				rc, ctl->num);
 
 		ctx->timegen_en = true;
+#ifdef CONFIG_MACH_RCL
+		if (sctl)
+			ctx->timegen_en = true;
+#endif
 		rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_ON, NULL,
 			CTL_INTF_EVENT_FLAG_DEFAULT);
 		WARN(rc, "intf %d panel on error (%d)\n", ctl->intf_num, rc);
@@ -1935,6 +2039,10 @@ static void mdss_mdp_fetch_start_config(struct mdss_mdp_video_ctx *ctx,
 	if (pinfo->dynamic_fps && (pinfo->dfps_update ==
 			DFPS_IMMEDIATE_CLK_UPDATE_MODE))
 		fetch_enable |= BIT(23);
+#ifdef CONFIG_MACH_RCL
+	else
+		fetch_enable &= ~BIT(23);
+#endif
 
 	pr_debug("ctl:%d fetch_start:%d lines:%d\n",
 		ctl->num, fetch_start, pinfo->prg_fet);
@@ -2080,7 +2188,9 @@ static int mdss_mdp_video_ctx_setup(struct mdss_mdp_ctl *ctl,
 	ctx->intf_type = ctl->intf_type;
 	init_completion(&ctx->vsync_comp);
 	spin_lock_init(&ctx->vsync_lock);
+#ifndef CONFIG_MACH_RCL
 	spin_lock_init(&ctx->dfps_lock);
+#endif
 	mutex_init(&ctx->vsync_mtx);
 	atomic_set(&ctx->vsync_ref, 0);
 	spin_lock_init(&ctx->lineptr_lock);
@@ -2325,6 +2435,10 @@ void mdss_mdp_switch_to_cmd_mode(struct mdss_mdp_ctl *ctl, int prep)
 	if (!prep) {
 		mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_DSI_RECONFIG_CMD,
 			(void *) mode, CTL_INTF_EVENT_FLAG_DEFAULT);
+#ifdef CONFIG_MACH_RCL
+		mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_DSC_PPS_SEND,
+			NULL, CTL_INTF_EVENT_FLAG_DEFAULT);
+#endif
 		return;
 	}
 
@@ -2334,6 +2448,15 @@ void mdss_mdp_switch_to_cmd_mode(struct mdss_mdp_ctl *ctl, int prep)
 		pr_err("Time engine not enabled, cannot switch from vid\n");
 		return;
 	}
+
+#ifdef CONFIG_MACH_RCL
+	/*
+	 * keep track of vsync, so it can be enabled as part
+	 * of the post switch sequence
+	 */
+	if (ctl->vsync_handler.enabled)
+		ctl->need_vsync_on = true;
+#endif
 
 	/* Start off by sending command to initial cmd mode */
 	rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_DSI_DYNAMIC_SWITCH,
@@ -2351,9 +2474,16 @@ void mdss_mdp_switch_to_cmd_mode(struct mdss_mdp_ctl *ctl, int prep)
 	}
 	frame_rate = mdss_panel_get_framerate
 			(&(ctl->panel_data->panel_info));
+#ifdef CONFIG_MACH_RCL
+	// Note: we shouldn't have to wait for longer than 48Hz.
+	if (!(frame_rate >= 48 && frame_rate <= 240))
+		frame_rate = 48;
+#else
 	if (!(frame_rate >= 24 && frame_rate <= 240))
 		frame_rate = 24;
+#endif
 	frame_rate = ((1000/frame_rate) + 1);
+#ifndef CONFIG_MACH_RCL
 	/*
 	 * In order for panel to switch to cmd mode, we need
 	 * to wait for one more video frame to be sent after
@@ -2361,6 +2491,7 @@ void mdss_mdp_switch_to_cmd_mode(struct mdss_mdp_ctl *ctl, int prep)
 	 * turning off the timeing engine.
 	 */
 	msleep(frame_rate);
+#endif
 	mdss_mdp_turn_off_time_engine(ctl, ctx, frame_rate);
 	mdss_bus_bandwidth_ctrl(false);
 }
@@ -2413,8 +2544,13 @@ static void early_wakeup_dfps_update_work(struct work_struct *work)
 		return;
 	}
 
+#ifdef CONFIG_MACH_RCL
+	/* We want to boost the FPS to the max allowed for better UX. */
+	dfps = pdata->panel_info.max_fps;
+#else
 	/* get the default fps that was cached before any dfps update */
 	dfps = pdata->panel_info.default_fps;
+#endif
 
 	ATRACE_BEGIN(__func__);
 
@@ -2425,7 +2561,11 @@ static void early_wakeup_dfps_update_work(struct work_struct *work)
 	}
 
 	data.fps = dfps;
+#ifdef CONFIG_MACH_RCL
+	if (mdss_fb_dfps_update_params(mfd, pdata, &data))
+#else
 	if (mdss_mdp_dfps_update_params(mfd, pdata, &data))
+#endif
 		pr_err("failed to set dfps params!\n");
 
 	/* update the HW with the new fps */
@@ -2557,7 +2697,11 @@ int mdss_mdp_video_start(struct mdss_mdp_ctl *ctl)
 	ctl->ops.read_line_cnt_fnc = mdss_mdp_video_line_count;
 	ctl->ops.add_vsync_handler = mdss_mdp_video_add_vsync_handler;
 	ctl->ops.remove_vsync_handler = mdss_mdp_video_remove_vsync_handler;
+#ifdef CONFIG_MACH_RCL
+	ctl->ops.config_fps_fnc = NULL; /* Don't allow switching the fps in video mode */
+#else
 	ctl->ops.config_fps_fnc = mdss_mdp_video_config_fps;
+#endif
 	ctl->ops.early_wake_up_fnc = mdss_mdp_video_early_wake_up;
 	ctl->ops.update_lineptr = mdss_mdp_video_lineptr_ctrl;
 	ctl->ops.avr_ctrl_fnc = mdss_mdp_video_avr_ctrl;

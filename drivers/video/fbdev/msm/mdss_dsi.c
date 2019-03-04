@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -377,6 +378,32 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+#ifdef CONFIG_MACH_RCL
+	// VSN OFF
+	ret = fih_msm_dss_enable_vreg(
+		ctrl_pdata->panel_power_data.vreg_config,
+		ctrl_pdata->panel_power_data.num_vreg, 0, 2);
+	if (ret)
+		pr_err("%s: failed to disable vregs for %s\n",
+			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+
+	// VSP OFF
+	ret = fih_msm_dss_enable_vreg(
+		ctrl_pdata->panel_power_data.vreg_config,
+		ctrl_pdata->panel_power_data.num_vreg, 0, 1);
+	if (ret)
+		pr_err("%s: failed to disable vregs for %s\n",
+			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+
+	// EXCLK OFF
+	ret = fih_msm_dss_enable_vreg(
+		ctrl_pdata->panel_power_data.vreg_config,
+		ctrl_pdata->panel_power_data.num_vreg, 0, 3);
+	if (ret)
+		pr_err("%s: failed to disable vregs for %s\n",
+			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+#endif
+
 	ret = mdss_dsi_panel_reset(pdata, 0);
 	if (ret) {
 		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
@@ -386,12 +413,22 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
 		pr_debug("reset disable: pinctrl not enabled\n");
 
+#ifdef CONFIG_MACH_RCL
+	// IOVCC OFF
+	ret = fih_msm_dss_enable_vreg(
+		ctrl_pdata->panel_power_data.vreg_config,
+		ctrl_pdata->panel_power_data.num_vreg, 0, 0);
+	if (ret)
+		pr_err("%s: failed to disable vregs for %s\n",
+			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+#else
 	ret = msm_dss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
 		ctrl_pdata->panel_power_data.num_vreg, 0);
 	if (ret)
 		pr_err("%s: failed to disable vregs for %s\n",
 			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+#endif
 
 end:
 	return ret;
@@ -410,6 +447,37 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+#ifdef CONFIG_MACH_RCL
+	// IOVCC ON
+	ret = fih_msm_dss_enable_vreg(
+		ctrl_pdata->panel_power_data.vreg_config,
+		ctrl_pdata->panel_power_data.num_vreg, 1, 0);
+	if (ret) {
+		pr_err("%s: failed to enable vregs for %s\n",
+			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+		return ret;
+	}
+
+	// VSP ON
+	ret = fih_msm_dss_enable_vreg(
+		ctrl_pdata->panel_power_data.vreg_config,
+		ctrl_pdata->panel_power_data.num_vreg, 1, 1);
+	if (ret) {
+		pr_err("%s: failed to enable vregs for %s\n",
+			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+		return ret;
+	}
+
+	// VSN ON
+	ret = fih_msm_dss_enable_vreg(
+		ctrl_pdata->panel_power_data.vreg_config,
+		ctrl_pdata->panel_power_data.num_vreg, 1, 2);
+	if (ret) {
+		pr_err("%s: failed to enable vregs for %s\n",
+			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+		return ret;
+	}
+#else
 	ret = msm_dss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
 		ctrl_pdata->panel_power_data.num_vreg, 1);
@@ -418,6 +486,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
 		return ret;
 	}
+#endif
 
 	/*
 	 * If continuous splash screen feature is enabled, then we need to
@@ -435,6 +504,24 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 			pr_err("%s: Panel reset failed. rc=%d\n",
 					__func__, ret);
 	}
+#ifdef CONFIG_MACH_RCL
+	else {
+		ret = mdss_dsi_panel_reset(pdata, 1);
+		if (ret)
+			pr_err("%s: Panel reset failed. rc=%d\n",
+					__func__, ret);
+	}
+
+	// EXCLK ON
+	ret = fih_msm_dss_enable_vreg(
+		ctrl_pdata->panel_power_data.vreg_config,
+		ctrl_pdata->panel_power_data.num_vreg, 1, 3);
+	if (ret) {
+		pr_err("%s: failed to enable vregs for %s\n",
+			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+		return ret;
+	}
+#endif
 
 	return ret;
 }
@@ -1445,6 +1532,17 @@ static int mdss_dsi_reconfig(struct mdss_panel_data *pdata, int mode)
 		mdss_dsi_sw_reset(ctrl_pdata, true);
 		mdss_dsi_ctrl_setup(ctrl_pdata);
 		mdss_dsi_controller_cfg(true, pdata);
+
+#ifdef CONFIG_MACH_RCL
+		if (pinfo->force_clk_lane_hs) {
+			u32 tmp;
+			tmp = MIPI_INP((ctrl_pdata->ctrl_base) + 0xac);
+			tmp |= (1 << 28);
+			MIPI_OUTP((ctrl_pdata->ctrl_base) + 0xac, tmp);
+			wmb();
+		}
+#endif
+
 		mdss_dsi_clk_ctrl(ctrl_pdata, ctrl_pdata->dsi_clk_handle,
 				  MDSS_DSI_ALL_CLKS, MDSS_DSI_CLK_OFF);
 	}
@@ -1759,7 +1857,11 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 		mdss_dsi_host_init(pdata);
 	}
 
+#ifdef CONFIG_MACH_RCL
+	mdss_dsi_op_mode_config(pdata->panel_info.mipi.mode, pdata);
+#else
 	mdss_dsi_op_mode_config(DSI_CMD_MODE, pdata);
+#endif
 
 	if (pdata->panel_info.dynamic_switch_pending) {
 		pr_info("%s: switching to %s mode\n", __func__,
@@ -2454,7 +2556,25 @@ static int mdss_dsi_dfps_config(struct mdss_panel_data *pdata, int new_fps)
 	if (pinfo->dfps_update == DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP ||
 		pinfo->dfps_update == DFPS_IMMEDIATE_PORCH_UPDATE_MODE_VFP) {
 		/* Porch method */
+#ifdef CONFIG_MACH_RCL
+		if (pinfo->mipi.mode == DSI_VIDEO_MODE) {
+			__mdss_dsi_update_video_mode_total(pdata, new_fps);
+		}
+
+		if (ctrl_pdata->refresh_rate_ctl) {
+			/* configure only for master control in split display */
+			if (mdss_dsi_is_ctrl_clk_master(ctrl_pdata)) {
+				rc = ctrl_pdata->refresh_rate_ctl(pdata, new_fps);
+				if (rc) {
+					pr_err("%s: Failed to send VFP update in cmd mode\n", __func__);
+					goto end_update;
+				}
+				ctrl_pdata->panel_data.panel_info.current_fps = new_fps;
+			}
+		}
+#else
 		__mdss_dsi_update_video_mode_total(pdata, new_fps);
+#endif
 	} else if (pinfo->dfps_update == DFPS_IMMEDIATE_CLK_UPDATE_MODE) {
 		/* Clock update method */
 		u64 new_clk_rate = mdss_dsi_calc_bitclk
