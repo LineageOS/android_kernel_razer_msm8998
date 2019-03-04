@@ -283,6 +283,71 @@ vreg_set_opt_mode_fail:
 } /* msm_dss_enable_vreg */
 EXPORT_SYMBOL(msm_dss_enable_vreg);
 
+int fih_msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable, int power_node)
+{
+	int rc = 0;
+	bool need_sleep;
+	if (enable) {
+		rc = PTR_RET(in_vreg[power_node].vreg);
+		if (rc) {
+			DEV_ERR("%pS->%s: %s regulator error. rc=%d\n",
+				__builtin_return_address(0), __func__,
+				in_vreg[power_node].vreg_name, rc);
+			goto vreg_set_opt_mode_fail;
+		}
+		need_sleep = !regulator_is_enabled(in_vreg[power_node].vreg);
+		if (in_vreg[power_node].pre_on_sleep && need_sleep)
+			usleep_range(in_vreg[power_node].pre_on_sleep * 1000,
+				in_vreg[power_node].pre_on_sleep * 1000);
+		rc = regulator_set_load(in_vreg[power_node].vreg,
+			in_vreg[power_node].enable_load);
+		if (rc < 0) {
+			DEV_ERR("%pS->%s: %s set opt m fail\n",
+				__builtin_return_address(0), __func__,
+				in_vreg[power_node].vreg_name);
+			goto vreg_set_opt_mode_fail;
+		}
+		rc = regulator_enable(in_vreg[power_node].vreg);
+		if (in_vreg[power_node].post_on_sleep && need_sleep)
+			usleep_range(in_vreg[power_node].post_on_sleep * 1000,
+				in_vreg[power_node].post_on_sleep * 1000);
+		if (rc < 0) {
+			DEV_ERR("%pS->%s: %s enable failed\n",
+				__builtin_return_address(0), __func__,
+				in_vreg[power_node].vreg_name);
+			goto disable_vreg;
+		}
+	} else {
+		if (in_vreg[power_node].pre_off_sleep)
+			usleep_range(in_vreg[power_node].pre_off_sleep * 1000,
+				in_vreg[power_node].pre_off_sleep * 1000);
+		regulator_set_load(in_vreg[power_node].vreg,
+			in_vreg[power_node].disable_load);
+		regulator_disable(in_vreg[power_node].vreg);
+		if (in_vreg[power_node].post_off_sleep)
+			usleep_range(in_vreg[power_node].post_off_sleep * 1000,
+				in_vreg[power_node].post_off_sleep * 1000);
+	}
+	return rc;
+
+disable_vreg:
+	regulator_set_load(in_vreg[power_node].vreg, in_vreg[power_node].disable_load);
+
+vreg_set_opt_mode_fail:
+	if (in_vreg[power_node].pre_off_sleep)
+		usleep_range(in_vreg[power_node].pre_off_sleep * 1000,
+			in_vreg[power_node].pre_off_sleep * 1000);
+	regulator_set_load(in_vreg[power_node].vreg,
+		in_vreg[power_node].disable_load);
+	regulator_disable(in_vreg[power_node].vreg);
+	if (in_vreg[power_node].post_off_sleep)
+		usleep_range(in_vreg[power_node].post_off_sleep * 1000,
+			in_vreg[power_node].post_off_sleep * 1000);
+
+	return rc;
+} /* fih_msm_dss_enable_vreg */
+EXPORT_SYMBOL(fih_msm_dss_enable_vreg);
+
 int msm_dss_enable_gpio(struct dss_gpio *in_gpio, int num_gpio, int enable)
 {
 	int i = 0, rc = 0;
