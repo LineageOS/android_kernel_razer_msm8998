@@ -4,6 +4,8 @@
  *
  * Copyright (C) 2011 Samsung Electronics
  *	MyungJoo Ham <myungjoo.ham@samsung.com>
+ * Copyright (C) 2018 Razer Inc.
+ * Copyright (C) 2018 Paranoid Android.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -35,6 +37,7 @@ static struct class *devfreq_class;
  * monitoring mechanism.
  */
 static struct workqueue_struct *devfreq_wq;
+#define MAX_DEVFREQ_ACTIVE 6
 
 /* The list of all device-devfreq governors */
 static LIST_HEAD(devfreq_governor_list);
@@ -246,6 +249,9 @@ static void devfreq_monitor(struct work_struct *work)
 	err = update_devfreq(devfreq);
 	if (err)
 		dev_err(&devfreq->dev, "dvfs failed with (%d) error\n", err);
+
+	/* Cancel pending work items */
+	cancel_delayed_work(&devfreq->work);
 
 	queue_delayed_work(devfreq_wq, &devfreq->work,
 				msecs_to_jiffies(devfreq->profile->polling_ms));
@@ -1098,7 +1104,8 @@ static int __init devfreq_init(void)
 		return PTR_ERR(devfreq_class);
 	}
 
-	devfreq_wq = create_freezable_workqueue("devfreq_wq");
+	devfreq_wq = alloc_workqueue("devfreq_wq", WQ_FREEZABLE |
+				WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS, MAX_DEVFREQ_ACTIVE);
 	if (!devfreq_wq) {
 		class_destroy(devfreq_class);
 		pr_err("%s: couldn't create workqueue\n", __FILE__);
