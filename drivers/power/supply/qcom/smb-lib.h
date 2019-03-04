@@ -66,6 +66,7 @@ enum print_reason {
 #define USBIN_I_VOTER			"USBIN_I_VOTER"
 #define WEAK_CHARGER_VOTER		"WEAK_CHARGER_VOTER"
 #define OV_VOTER			"OV_VOTER"
+#define RAZER_LIMIT_VOTER		"RAZER_LIMIT_VOTER"
 
 #define VCONN_MAX_ATTEMPTS	3
 #define OTG_MAX_ATTEMPTS	3
@@ -197,6 +198,9 @@ struct smb_params {
 	struct smb_chg_param	dc_icl_div2_mid_hv;
 	struct smb_chg_param	dc_icl_div2_hv;
 	struct smb_chg_param	jeita_cc_comp;
+	/* WayneWCShiue - 9801-468 - [BAT] Jeita temperature protection */
+	struct smb_chg_param	jeita_fv_comp;
+	/* end 9801-468 */
 	struct smb_chg_param	freq_buck;
 	struct smb_chg_param	freq_boost;
 };
@@ -355,6 +359,19 @@ struct smb_charger {
 	/* qnovo */
 	int			usb_icl_delta_ua;
 	int			pulse_cnt;
+
+	/* WayneWCShiue - 9801-8555 - [BAT] Inform Battery Protect AP once the battery can only charge to 4.1V */
+	int fih_jeita_full_capacity_warm_en;
+	int fih_jeita_full_capacity_cool_en;
+	/* end 9801-8555 */
+
+	/* Razer charge limiting system */
+	bool razer_charge_limit_enable;
+	bool razer_charge_limit_active;
+	int  razer_charge_limit_max;
+	int  razer_charge_limit_dropdown;
+	struct mutex razer_charge_limit_lock;
+	struct work_struct razer_charge_limit_update_work;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -462,6 +479,15 @@ int smblib_get_prop_usb_current_now(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_typec_cc_orientation(struct smb_charger *chg,
 				union power_supply_propval *val);
+
+/* WayneWCShiue - 9801-8555 - [BAT] Inform Battery Protect AP once the battery can only charge to 4.1V */
+int  FIH_check_chg_status(struct smb_charger *chg);
+void FIH_chg_abnormal_check(struct smb_charger *chg);
+void FIH_chg_reEnable(struct smb_charger *chg);
+void FIH_USBIN_reEnable(struct smb_charger *chg);
+void FIH_soft_JEITA_recharge_check(struct smb_charger *chg);
+/* end 9801-8555 */
+
 int smblib_get_prop_typec_power_role(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_pd_allowed(struct smb_charger *chg,
@@ -522,4 +548,7 @@ int smblib_set_prop_pr_swap_in_progress(struct smb_charger *chg,
 
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);
+
+void razer_charge_limit_update(struct smb_charger *chg);
+
 #endif /* __SMB2_CHARGER_H */

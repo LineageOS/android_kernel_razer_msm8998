@@ -118,6 +118,7 @@ enum {
 enum power_supply_property {
 	/* Properties of type `int' */
 	POWER_SUPPLY_PROP_STATUS = 0,
+	POWER_SUPPLY_PROP_STATUS_INTERNAL, //Device was discharging when battery capacity is above 60% and temperature is warm.
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_PRESENT,
@@ -243,6 +244,17 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_PARALLEL_DISABLE,
 	POWER_SUPPLY_PROP_PE_START,
 	POWER_SUPPLY_PROP_SET_SHIP_MODE,
+	/* WayneWCShiue - 9801-8555 - [BAT] Inform Battery Protect AP once the battery can only charge to 4.1V */
+	POWER_SUPPLY_PROP_JEITA_FULL_CAPACITY_STATUS,
+	POWER_SUPPLY_PROP_JEITA_FULL_CAPACITY_WARM_EN,
+	POWER_SUPPLY_PROP_JEITA_FULL_CAPACITY_COOL_EN,
+	/* end 9801-8555 */
+	/* WayneWCShiue - 9802-1713 - Add periodical checker mechanism for charging */
+	POWER_SUPPLY_PROP_FIH_PERIOD_CHECKER,
+	/* end 9802-1713 */
+	/* WayneWCShiue - 9801-6414 - Add battery event for problem report */
+	POWER_SUPPLY_PROP_MONITOR_EVENT,
+	/* end 9801-6414 */
 	POWER_SUPPLY_PROP_SOC_REPORTING_READY,
 	POWER_SUPPLY_PROP_DEBUG_BATTERY,
 	POWER_SUPPLY_PROP_FCC_DELTA,

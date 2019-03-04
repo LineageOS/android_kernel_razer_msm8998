@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -933,6 +934,7 @@ struct mdss_mdp_writeback_arg {
 struct mdss_mdp_wfd;
 
 struct mdss_overlay_private {
+	bool vsync_en;
 	ktime_t vsync_time;
 	ktime_t lineptr_time;
 	struct kernfs_node *vsync_event_sd;
@@ -1679,8 +1681,6 @@ struct mdss_data_type *mdss_mdp_get_mdata(void);
 int mdss_mdp_secure_session_ctrl(unsigned int enable, u64 flags);
 
 int mdss_mdp_overlay_init(struct msm_fb_data_type *mfd);
-int mdss_mdp_dfps_update_params(struct msm_fb_data_type *mfd,
-	struct mdss_panel_data *pdata, struct dynamic_fps_data *data);
 int mdss_mdp_layer_atomic_validate(struct msm_fb_data_type *mfd,
 	struct file *file, struct mdp_layer_commit_v1 *ov_commit);
 int mdss_mdp_layer_pre_commit(struct msm_fb_data_type *mfd,

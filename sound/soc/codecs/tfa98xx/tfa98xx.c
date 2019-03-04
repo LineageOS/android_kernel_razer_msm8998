@@ -2040,12 +2040,8 @@ static void tfa98xx_interrupt_enable(struct tfa98xx *tfa98xx, bool enable)
  * Downloaded once only at module init
  * FIXME: may need to review that (one per instance of codec device?)
  */
-#ifdef CONFIG_FIH_9800
-static char *fw_name = "TFA9891.cnt";
-#else //FIH_9801 , FIH_9802
 static char *fw_name = "tfa98xx.cnt";
-#endif
-#if defined(CONFIG_FIH_RCL)
+#ifdef CONFIG_FIH_RCL
 static char *fw_nameEVT = "tfa98xx.cnt";
 #elif defined(CONFIG_FIH_9801)
 static char *fw_nameEVT = "tfa98xxEVT.cnt";
@@ -2066,26 +2062,26 @@ static void tfa98xx_container_loaded(const struct firmware *cont, void *context)
 	tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_FAIL;
 
 	if (!cont) {
-		#ifdef CONFIG_FIH_9801
+#ifdef CONFIG_FIH_9801
 		if(fih_hwid_fetch(FIH_HWID_REV)<=FIH_REV_EVT1)
 			pr_err("tfa98xx: Failed to read %s\n", fw_nameEVT);
 		else
 			pr_err("tfa98xx: Failed to read %s\n", fw_name);
-		#else
+#else
 		pr_err("tfa98xx: Failed to read %s\n", fw_name);
-		#endif
+#endif
 		return;
 	}
 
-	#ifdef CONFIG_FIH_9801
+#ifdef CONFIG_FIH_9801
 	if(fih_hwid_fetch(FIH_HWID_REV)<=FIH_REV_EVT1)
 		pr_err("tfa98xx: loaded %s - size: %zu\n", fw_nameEVT,cont ? cont->size : 0);
 	else
 		pr_err("tfa98xx: loaded %s - size: %zu\n", fw_name,cont ? cont->size : 0);
-	#else
+#else
 	pr_err("tfa98xx: loaded %s - size: %zu\n", fw_name,
                                        cont ? cont->size : 0);
-	#endif
+#endif
 
 	spin_lock_irqsave(&cont_load_lock, flags);
 
@@ -2183,7 +2179,7 @@ static void tfa98xx_container_loaded(const struct firmware *cont, void *context)
 static int tfa98xx_load_container(struct tfa98xx *tfa98xx)
 {
 	tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_PENDING;
-	#ifdef CONFIG_FIH_9801
+#ifdef CONFIG_FIH_9801
 	if(fih_hwid_fetch(FIH_HWID_REV)<=FIH_REV_EVT1)
 	{
 		return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
@@ -2196,11 +2192,11 @@ static int tfa98xx_load_container(struct tfa98xx *tfa98xx)
 	                               fw_name, tfa98xx->dev, GFP_KERNEL,
 	                               tfa98xx, tfa98xx_container_loaded);
 	}
-	#else
+#else
 	return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 									fw_name, tfa98xx->dev, GFP_KERNEL,
 									tfa98xx, tfa98xx_container_loaded);
-	#endif
+#endif
 }
 
 
@@ -2513,7 +2509,7 @@ static int tfa98xx_startup(struct snd_pcm_substream *substream,
 		}
 	}
 
-#if defined(CONFIG_FIH_9801) || defined(CONFIG_FIH_9802) || defined(CONFIG_FIH_RCL)
+#if defined(CONFIG_FIH_9801) || defined(CONFIG_FIH_RCL)
 	return 0;
 #else
 	return snd_pcm_hw_constraint_list(substream->runtime, 0,
