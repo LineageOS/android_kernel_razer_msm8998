@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3281,6 +3282,9 @@ static void __dsc_setup_dual_lm_single_display(struct mdss_mdp_ctl *ctl,
 		writel_relaxed(0x0, mdata->mdp_base + MDSS_MDP_REG_DCE_SEL);
 	}
 
+#ifdef CONFIG_MACH_RCL
+	mdss_panel_dsc_parameters_calc(dsc);
+#endif
 	mdss_panel_dsc_update_pic_dim(dsc, pic_width, pic_height);
 
 	intf_ip_w = this_frame_slices * dsc->slice_width;
@@ -3838,6 +3842,17 @@ int mdss_mdp_ctl_reconfig(struct mdss_mdp_ctl *ctl,
 {
 	void *tmp;
 	int ret = 0;
+#ifdef CONFIG_MACH_RCL
+	int retire_cnt = 0;
+	struct msm_fb_data_type *mfd = NULL;
+	struct mdss_overlay_private *mdp5_data = NULL;
+
+	if (!ctl || !ctl->mfd) {
+		return -EINVAL;
+	}
+	mfd = ctl->mfd;
+	mdp5_data = mfd_to_mdp5_data(mfd);
+#endif
 
 	/*
 	 * Switch first to prevent deleting important data in the case
@@ -3852,6 +3867,31 @@ int mdss_mdp_ctl_reconfig(struct mdss_mdp_ctl *ctl,
 	/* if only changing resolution there is no need for intf reconfig */
 	if (!ctl->is_video_mode == (pdata->panel_info.type == MIPI_CMD_PANEL))
 		goto skip_intf_reconfig;
+
+#ifdef CONFIG_MACH_RCL
+	/*
+	 * If retire fences are still active, then signal the timeline since
+	 * we should only be reconfiguring at the start of a new commit or
+	 * on a blank/unblank event.
+	 */
+	mutex_lock(&mfd->mdp_sync_pt_data.sync_mutex);
+	retire_cnt = mdp5_data->retire_cnt;
+	mutex_unlock(&mfd->mdp_sync_pt_data.sync_mutex);
+	if (retire_cnt) {
+		if (mfd->mdp.signal_retire_fence) {
+			mfd->mdp.signal_retire_fence(mfd, retire_cnt);
+		}
+
+		/*
+		 * the retire work can still schedule after above retire_signal
+		 * api call. Flush workqueue guarantees that current caller
+		 * context is blocked till retire_work finishes. Any work
+		 * schedule after flush call should not cause any issue because
+		 * retire_signal api checks for retire_cnt with sync_mutex lock.
+		 */
+		flush_kthread_work(&mdp5_data->vsync_work);
+	}
+#endif
 
 	/*
 	 * Intentionally not clearing stop function, as stop will
@@ -4360,6 +4400,14 @@ static int mdss_mdp_ctl_start_sub(struct mdss_mdp_ctl *ctl, bool handoff)
 	 * (2) continuous splash finished.
 	 */
 	if (handoff || !ctl->panel_data->panel_info.cont_splash_enabled) {
+#ifdef CONFIG_MACH_RCL
+		if (ctl->pending_mode_switch == MIPI_VIDEO_PANEL) {
+			struct mdss_panel_info *pinfo = &ctl->panel_data->panel_info;
+			if (is_dsc_compression(pinfo)){
+				mdss_mdp_ctl_dsc_setup(ctl, pinfo);
+			}
+		}
+#endif
 		if (ctl->ops.start_fnc)
 			ret = ctl->ops.start_fnc(ctl);
 		else
@@ -4398,7 +4446,11 @@ static int mdss_mdp_ctl_start_sub(struct mdss_mdp_ctl *ctl, bool handoff)
 		outsize = (mixer->height << 16) | mixer->width;
 		mdp_mixer_write(mixer, MDSS_MDP_REG_LM_OUT_SIZE, outsize);
 
-		if (is_dsc_compression(pinfo)) {
+		if (is_dsc_compression(pinfo)
+#ifdef CONFIG_MACH_RCL
+		    && ctl->pending_mode_switch != MIPI_VIDEO_PANEL
+#endif
+		    ) {
 			mdss_mdp_ctl_dsc_setup(ctl, pinfo);
 		} else if (pinfo->compression_mode == COMPRESSION_FBC) {
 			ret = mdss_mdp_ctl_fbc_enable(1, ctl->mixer_left,
@@ -4467,6 +4519,16 @@ int mdss_mdp_ctl_start(struct mdss_mdp_ctl *ctl, bool handoff)
 			mdss_mdp_ctl_pp_split_display_enable(true, ctl);
 		}
 	}
+
+#ifdef CONFIG_MACH_RCL
+	/* Need to add the vsync handler now that we are up and running */
+	if (ctl->need_vsync_on && ctl->ops.add_vsync_handler) {
+		pr_debug("%s: add vsync handlers now\n", __func__);
+		ctl->ops.add_vsync_handler(ctl,
+				&ctl->vsync_handler);
+		ctl->need_vsync_on = false;
+	}
+#endif
 
 	mdss_mdp_hist_intr_setup(&mdata->hist_intr, MDSS_IRQ_RESUME);
 
@@ -5614,6 +5676,15 @@ int mdss_mdp_ctl_update_fps(struct mdss_mdp_ctl *ctl)
 		return 0;
 	}
 
+#ifdef CONFIG_MACH_RCL
+	if (ctl->mfd->switch_new_mode == MIPI_CMD_PANEL &&
+			ctl->mfd->panel.type == MIPI_VIDEO_PANEL) {
+		// Wait till we switch to command mode before we update the FPS
+		pr_warn("%s: wait till we swich to command mode before updating FPS\n", __func__);
+		return 0;
+	}
+#endif
+
 	mdp5_data = mfd_to_mdp5_data(ctl->mfd);
 	if (!mdp5_data)
 		return -ENODEV;
@@ -5820,7 +5891,12 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 	sctl = mdss_mdp_get_split_ctl(ctl);
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
 
-	if (ctl->ops.avr_ctrl_fnc) {
+	if (ctl->ops.avr_ctrl_fnc
+#ifdef CONFIG_MACH_RCL
+	    && test_bit(MDSS_CAPS_AVR_SUPPORTED, mdata->mdss_caps_map)
+	    && ctl->avr_info.avr_enabled
+#endif
+	    ) {
 		/* avr_ctrl_fnc will configure both master & slave */
 		ret = ctl->ops.avr_ctrl_fnc(ctl, true);
 		if (ret) {

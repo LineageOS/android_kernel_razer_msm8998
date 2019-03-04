@@ -1,4 +1,5 @@
 /* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3011,6 +3012,51 @@ int mdss_mdp_cmd_wait4_vsync(struct mdss_mdp_ctl *ctl)
 	return rc;
 }
 
+#ifdef CONFIG_MACH_RCL
+static int mdss_mdp_cmd_config_fps(struct mdss_mdp_ctl *ctl, int new_fps) {
+	struct mdss_panel_data *pdata;
+	int rc = 0;
+
+	/* add HW recommended delay to handle panel_vsync */
+	udelay(2000);
+	mutex_lock(&ctl->offlock);
+	pdata = ctl->panel_data;
+	if (pdata == NULL) {
+		pr_err("%s: Invalid panel data\n", __func__);
+		rc = -EINVAL;
+		goto end;
+	}
+
+	pr_debug("%s: ctl:%d dfps_update:%d fps:%d\n", __func__,
+		ctl->num, pdata->panel_info.dfps_update, new_fps);
+	MDSS_XLOG(ctl->num, pdata->panel_info.dfps_update,
+		new_fps, XLOG_FUNC_ENTRY);
+
+	if (pdata->panel_info.dfps_update != DFPS_SUSPEND_RESUME_MODE) {
+		if (pdata->panel_info.dfps_update == DFPS_IMMEDIATE_PORCH_UPDATE_MODE_VFP ||
+				pdata->panel_info.dfps_update == DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP ||
+				pdata->panel_info.dfps_update) {
+			mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
+
+			rc = mdss_mdp_ctl_intf_event(ctl,
+					MDSS_EVENT_PANEL_UPDATE_FPS,
+					(void *) (unsigned long) new_fps,
+					CTL_INTF_EVENT_FLAG_DEFAULT);
+			WARN(rc, "mdss intf %d panel fps update error (%d)\n",
+				ctl->intf_num, rc);
+			rc = 0;
+
+			mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
+		}
+	}
+
+end:
+	MDSS_XLOG(ctl->num, new_fps, XLOG_FUNC_EXIT);
+	mutex_unlock(&ctl->offlock);
+
+	return rc;
+}
+#endif
 
 /*
  * There are 3 partial update possibilities
@@ -3528,6 +3574,11 @@ static void early_wakeup_work(struct work_struct *work)
 	struct mdss_mdp_cmd_ctx *ctx =
 		container_of(work, typeof(*ctx), early_wakeup_clk_work);
 	struct mdss_mdp_ctl *ctl;
+#ifdef CONFIG_MACH_RCL
+	struct mdss_panel_data *pdata;
+	struct mdss_panel_info *pinfo;
+	struct dynamic_fps_data data = {0};
+#endif
 
 	if (!ctx) {
 		pr_err("%s: invalid ctx\n", __func__);
@@ -3542,9 +3593,43 @@ static void early_wakeup_work(struct work_struct *work)
 		goto fail;
 	}
 
+#ifdef CONFIG_MACH_RCL
+	pdata = ctl->panel_data;
+	if (!pdata) {
+		goto fail;
+	}
+	pinfo = &ctl->panel_data->panel_info;
+	if (!pinfo) {
+		goto fail;
+	}
+#endif
+
 	rc = mdss_mdp_resource_control(ctl, MDP_RSRC_CTL_EVENT_EARLY_WAKE_UP);
 	if (rc)
 		pr_err("%s: failed to control resources\n", __func__);
+
+#ifdef CONFIG_MACH_RCL
+	if (!pinfo->dynamic_fps || !pinfo->default_fps) {
+		pr_debug("%s: dfps not enabled on this panel\n", __func__);
+		goto fail;
+	}
+
+	/* We want to boost the FPS to the max allowed for better UX. */
+	if (pinfo->max_fps == pinfo->mipi.frame_rate) {
+		pr_debug("%s: FPS is already %d\n",
+			__func__, pinfo->max_fps);
+		goto fail;
+	}
+
+	data.fps = pinfo->max_fps;
+	if (mdss_fb_dfps_update_params(ctl->mfd, pdata, &data))
+		pr_err("failed to set dfps params!\n");
+
+	rc = mdss_mdp_ctl_update_fps(ctl);
+	if (rc)
+		pr_err("early wakeup failed to set %d fps ret=%d\n",
+			data.fps, rc);
+#endif
 
 fail:
 	ATRACE_END(__func__);
@@ -3806,6 +3891,19 @@ void mdss_mdp_switch_to_vid_mode(struct mdss_mdp_ctl *ctl, int prep)
 	pr_debug("%s start, prep = %d\n", __func__, prep);
 
 	if (prep) {
+#ifdef CONFIG_MACH_RCL
+		/*
+		 * keep track of vsync, so it can be enabled as part
+		 * of the post switch sequence
+		 */
+		if (ctl->vsync_handler.enabled)
+			ctl->need_vsync_on = true;
+
+		mdss_mdp_ctl_intf_event(ctl,
+			MDSS_EVENT_DSI_DYNAMIC_SWITCH,
+			(void *) MIPI_VIDEO_PANEL, CTL_INTF_EVENT_FLAG_DEFAULT);
+#endif
+
 		/*
 		 * In dsi_on there is an explicit decrement to dsi clk refcount
 		 * if we are in cmd mode, using the dsi client handle. We need
@@ -3921,6 +4019,9 @@ int mdss_mdp_cmd_start(struct mdss_mdp_ctl *ctl)
 	ctl->ops.update_lineptr = mdss_mdp_cmd_update_lineptr;
 	ctl->ops.panel_disable_cfg = mdss_mdp_cmd_panel_disable_cfg;
 	ctl->ops.wait_for_vsync_fnc = mdss_mdp_cmd_wait4_vsync;
+#ifdef CONFIG_MACH_RCL
+	ctl->ops.config_fps_fnc = mdss_mdp_cmd_config_fps;
+#endif
 	pr_debug("%s:-\n", __func__);
 
 	return 0;

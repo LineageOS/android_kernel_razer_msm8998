@@ -3,6 +3,7 @@
  *
  * Copyright (c) 2008-2019, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -55,6 +56,9 @@
 #include "mdss_debug.h"
 #include "mdss_smmu.h"
 #include "mdss_mdp.h"
+#ifdef CONFIG_MACH_RCL
+#include "mdss_dsi.h"
+#endif
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
@@ -331,7 +335,11 @@ static ssize_t mdss_fb_get_type(struct device *dev,
 	struct fb_info *fbi = dev_get_drvdata(dev);
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
 
+#ifdef CONFIG_MACH_RCL
+	switch (mfd->panel_info->type) {
+#else
 	switch (mfd->panel.type) {
+#endif
 	case NO_PANEL:
 		ret = snprintf(buf, PAGE_SIZE, "no panel\n");
 		break;
@@ -600,6 +608,9 @@ static ssize_t mdss_fb_get_panel_info(struct device *dev,
 	ret = scnprintf(buf, PAGE_SIZE,
 			"pu_en=%d\nxstart=%d\nwalign=%d\nystart=%d\nhalign=%d\n"
 			"min_w=%d\nmin_h=%d\nroi_merge=%d\ndyn_fps_en=%d\n"
+#ifdef CONFIG_MACH_RCL
+			"avr_min=%d\n"
+#endif
 			"min_fps=%d\nmax_fps=%d\npanel_name=%s\n"
 			"primary_panel=%d\nis_pluggable=%d\ndisplay_id=%s\n"
 			"is_cec_supported=%d\nis_pingpong_split=%d\n"
@@ -619,7 +630,11 @@ static ssize_t mdss_fb_get_panel_info(struct device *dev,
 			pinfo->roi_alignment.min_width,
 			pinfo->roi_alignment.min_height,
 			pinfo->partial_update_roi_merge,
-			pinfo->dynamic_fps, pinfo->min_fps, pinfo->max_fps,
+			pinfo->dynamic_fps,
+#ifdef CONFIG_MACH_RCL
+			pinfo->avr_min_fps,
+#endif
+			pinfo->min_fps, pinfo->max_fps,
 			pinfo->panel_name, pinfo->is_prim_panel,
 			pinfo->is_pluggable, pinfo->display_id,
 			pinfo->is_cec_supported, is_pingpong_split(mfd),
@@ -673,6 +688,10 @@ static ssize_t mdss_fb_force_panel_dead(struct device *dev,
 		pr_err("no panel connected!\n");
 		return len;
 	}
+
+#ifdef CONFIG_MACH_RCL
+	mdss_fb_report_panel_dead(mfd);
+#endif
 
 	if (kstrtouint(buf, 0, &pdata->panel_info.panel_force_dead))
 		pr_err("kstrtouint buf error!\n");
@@ -741,7 +760,11 @@ static int mdss_fb_blanking_mode_switch(struct msm_fb_data_type *mfd, int mode)
 	mfd->op_enable = false;
 
 	ret = mfd->mdp.configure_panel(mfd, mode, 1);
+#ifdef CONFIG_MACH_RCL
+	mdss_fb_set_mdp_sync_pt_threshold(mfd, mfd->panel_info->type);
+#else
 	mdss_fb_set_mdp_sync_pt_threshold(mfd, mfd->panel.type);
+#endif
 
 	mfd->op_enable = true;
 
@@ -913,6 +936,63 @@ static ssize_t mdss_fb_idle_pc_notify(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "idle power collapsed\n");
 }
 
+#ifdef CONFIG_MACH_RCL
+static ssize_t mdss_mdp_bl_skip_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	int ret;
+
+	if (mfd == NULL || mfd->panel_info == NULL)
+		return -EINVAL;
+
+	ret = scnprintf(buf, PAGE_SIZE, "%d", mfd->panel_info->bl_skip_enabled);
+
+	return ret;
+}
+
+static ssize_t mdss_mdp_bl_skip_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	int ret, val;
+
+	if (mfd == NULL || mfd->panel_info == NULL)
+		return -EINVAL;
+
+	ret = kstrtoint(buf, 10, &val);
+	if (ret) {
+		pr_err("Invalid value for bl_skip_en\n");
+		return -EINVAL;
+	}
+
+	mfd->panel_info->bl_skip_enabled = (val > 0) ? true : false;
+	sysfs_notify(&dev->kobj, NULL, "bl_skip_en");
+
+	return count;
+}
+#endif
+
+static ssize_t mdss_fb_get_mode_switch_event(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	int ret;
+
+	if (!mfd || !mfd->panel_info) {
+		pr_err("%s: no panel info\n", __func__);
+		return -EINVAL;
+	}
+
+	pr_debug("mdss mode switch event -- %d\n", mfd->panel_info->type);
+	/* MIPI_CMD_PANEL or MIPI_VIDEO_PANEL */
+	ret = scnprintf(buf, PAGE_SIZE, "%d\n", mfd->panel_info->type);
+	return ret;
+}
+
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -934,6 +1014,11 @@ static DEVICE_ATTR(measured_fps, S_IRUGO | S_IWUSR | S_IWGRP,
 static DEVICE_ATTR(msm_fb_persist_mode, S_IRUGO | S_IWUSR,
 	mdss_fb_get_persist_mode, mdss_fb_change_persist_mode);
 static DEVICE_ATTR(idle_power_collapse, S_IRUGO, mdss_fb_idle_pc_notify, NULL);
+#ifdef CONFIG_MACH_RCL
+static DEVICE_ATTR(mode_switch_event, S_IRUGO, mdss_fb_get_mode_switch_event, NULL);
+static DEVICE_ATTR(bl_skip_en, S_IRUGO | S_IWUSR | S_IWGRP, mdss_mdp_bl_skip_show,
+	mdss_mdp_bl_skip_store);
+#endif
 
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
@@ -949,6 +1034,10 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_measured_fps.attr,
 	&dev_attr_msm_fb_persist_mode.attr,
 	&dev_attr_idle_power_collapse.attr,
+#ifdef CONFIG_MACH_RCL
+	&dev_attr_mode_switch_event.attr,
+	&dev_attr_bl_skip_en.attr,
+#endif
 	NULL,
 };
 
@@ -1376,7 +1465,11 @@ static int mdss_fb_probe(struct platform_device *pdev)
 				__mdss_fb_sync_buf_done_callback;
 	}
 
+#ifdef CONFIG_MACH_RCL
+	mdss_fb_set_mdp_sync_pt_threshold(mfd, mfd->panel_info->type);
+#else
 	mdss_fb_set_mdp_sync_pt_threshold(mfd, mfd->panel.type);
+#endif
 
 	if (mfd->mdp.splash_init_fnc)
 		mfd->mdp.splash_init_fnc(mfd);
@@ -1852,9 +1945,22 @@ static void mdss_panel_validate_debugfs_info(struct msm_fb_data_type *mfd)
 	}
 }
 
+#ifdef CONFIG_MACH_RCL
+static void mdss_fb_release_kickoff(struct msm_fb_data_type *mfd)
+{
+	if (mfd->wait_for_kickoff) {
+		atomic_set(&mfd->kickoff_pending, 0);
+		wake_up_all(&mfd->kickoff_wait_q);
+	}
+}
+#endif
+
 static int mdss_fb_blank_blank(struct msm_fb_data_type *mfd,
 	int req_power_state)
 {
+#ifdef CONFIG_MACH_RCL
+	struct msm_sync_pt_data *sync_pt_data;
+#endif
 	int ret = 0;
 	int cur_power_state, current_bl;
 
@@ -1873,6 +1979,60 @@ static int mdss_fb_blank_blank(struct msm_fb_data_type *mfd,
 		pr_debug("No change in power state\n");
 		return 0;
 	}
+
+#ifdef CONFIG_MACH_RCL
+	if ((mfd->panel_info->mipi.boot_mode != mfd->panel_info->mipi.mode) &&
+	    (mfd->panel_info->type == MIPI_CMD_PANEL ||
+	     mfd->panel_info->type == MIPI_VIDEO_PANEL)) {
+		u32 translated_mode;
+		pr_info("%s: switching back to boot_mode=%d\n", __func__,
+				mfd->panel_info->mipi.boot_mode);
+
+		if (mfd->panel_info->mipi.boot_mode)
+			translated_mode = MIPI_CMD_PANEL;
+		else
+			translated_mode = MIPI_VIDEO_PANEL;
+
+		sync_pt_data = &mfd->mdp_sync_pt_data;
+		if (!sync_pt_data->async_wait_fences)
+			mdss_fb_wait_for_fence(sync_pt_data);
+		sync_pt_data->flushed = false;
+
+		mutex_lock(&mfd->switch_lock);
+		mfd->pending_switch = true;
+		mfd->switch_state = MDSS_MDP_WAIT_FOR_COMMIT;
+		mutex_unlock(&mfd->switch_lock);
+
+		mdss_fb_set_mdp_sync_pt_threshold(mfd, translated_mode);
+
+		ret = mfd->mdp.mode_switch(mfd, translated_mode);
+		if (ret)
+			pr_err("DSI mode switch has failed");
+		else {
+			mutex_lock(&mfd->switch_lock);
+			mfd->pending_switch = false;
+			mutex_unlock(&mfd->switch_lock);
+
+			mfd->mdp.mode_switch_post(mfd, translated_mode);
+
+			mutex_lock(&mfd->switch_lock);
+			mfd->switch_state = MDSS_MDP_NO_UPDATE_REQUESTED;
+			mfd->panel_info->type = translated_mode;
+			mfd->panel.type = translated_mode;
+			mutex_unlock(&mfd->switch_lock);
+
+			sysfs_notify(&mfd->fbi->dev->kobj, NULL, "mode_switch_event");
+
+			if (translated_mode == MIPI_CMD_PANEL && mfd->mdp.kickoff_fnc) {
+				ret = mfd->mdp.kickoff_fnc(mfd, NULL);
+				if (IS_ERR_VALUE(ret) || !sync_pt_data->flushed) {
+					mdss_fb_release_kickoff(mfd);
+					mdss_fb_signal_timeline(sync_pt_data);
+				}
+			}
+		}
+	}
+#endif
 
 	mutex_lock(&mfd->update.lock);
 	mfd->update.type = NOTIFY_TYPE_SUSPEND;
@@ -2122,6 +2282,7 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 
+#ifndef CONFIG_MACH_RCL
 	if (pdata->panel_info.is_lpm_mode &&
 			blank_mode == FB_BLANK_UNBLANK) {
 		pr_debug("panel is in lpm mode\n");
@@ -2129,6 +2290,7 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 		mdss_fb_set_mdp_sync_pt_threshold(mfd, mfd->panel.type);
 		pdata->panel_info.is_lpm_mode = false;
 	}
+#endif
 
 	if (pdata->panel_disable_mode)
 		mdss_mdp_enable_panel_disable_mode(mfd, false);
@@ -3085,6 +3247,7 @@ static void mdss_fb_release_fences(struct msm_fb_data_type *mfd)
 	mutex_unlock(&sync_pt_data->sync_mutex);
 }
 
+#ifndef CONFIG_MACH_RCL
 static void mdss_fb_release_kickoff(struct msm_fb_data_type *mfd)
 {
 	if (mfd->wait_for_kickoff) {
@@ -3092,6 +3255,7 @@ static void mdss_fb_release_kickoff(struct msm_fb_data_type *mfd)
 		wake_up_all(&mfd->kickoff_wait_q);
 	}
 }
+#endif
 
 /**
  * __mdss_fb_sync_buf_done_callback() - process async display events
@@ -3242,7 +3406,11 @@ static int mdss_fb_pan_display_ex(struct fb_info *info,
 
 	if ((mdss_fb_is_power_off(mfd)) &&
 		!((mfd->dcm_state == DCM_ENTER) &&
+#ifdef CONFIG_MACH_RCL
+		(mfd->panel_info->type == MIPI_CMD_PANEL)))
+#else
 		(mfd->panel.type == MIPI_CMD_PANEL)))
+#endif
 		return -EPERM;
 
 	if (var->xoffset > (info->var.xres_virtual - info->var.xres))
@@ -3407,7 +3575,11 @@ int mdss_fb_atomic_commit(struct fb_info *info,
 
 	if ((mdss_fb_is_power_off(mfd)) &&
 		!((mfd->dcm_state == DCM_ENTER) &&
+#ifdef CONFIG_MACH_RCL
+		(mfd->panel_info->type == MIPI_CMD_PANEL))) {
+#else
 		(mfd->panel.type == MIPI_CMD_PANEL))) {
+#endif
 		pr_err("commit is not supported when interface is in off state\n");
 		goto end;
 	}
@@ -3432,7 +3604,11 @@ int mdss_fb_atomic_commit(struct fb_info *info,
 		} else {
 			__ioctl_transition_dyn_mode_state(mfd,
 				MSMFB_ATOMIC_COMMIT, true, false);
+#ifdef CONFIG_MACH_RCL
+			if (mfd->panel_info->type == WRITEBACK_PANEL) {
+#else
 			if (mfd->panel.type == WRITEBACK_PANEL) {
+#endif
 				output_layer = commit_v1->output_layer;
 				if (!output_layer) {
 					pr_err("Output layer is null\n");
@@ -3497,7 +3673,11 @@ int mdss_fb_atomic_commit(struct fb_info *info,
 		ret = mdss_fb_pan_idle(mfd);
 
 end:
+#ifdef CONFIG_MACH_RCL
+	if (ret && (mfd->panel_info->type == WRITEBACK_PANEL) && wb_change)
+#else
 	if (ret && (mfd->panel.type == WRITEBACK_PANEL) && wb_change)
+#endif
 		mdss_fb_update_resolution(mfd, old_xres, old_yres, old_format);
 	return ret;
 }
@@ -3542,7 +3722,11 @@ static int mdss_fb_pan_display_sub(struct fb_var_screeninfo *var,
 
 	if ((mdss_fb_is_power_off(mfd)) &&
 		!((mfd->dcm_state == DCM_ENTER) &&
+#ifdef CONFIG_MACH_RCL
+		(mfd->panel_info->type == MIPI_CMD_PANEL)))
+#else
 		(mfd->panel.type == MIPI_CMD_PANEL)))
+#endif
 		return -EPERM;
 
 	if (var->xoffset > (info->var.xres_virtual - info->var.xres))
@@ -3563,7 +3747,11 @@ static int mdss_fb_pan_display_sub(struct fb_var_screeninfo *var,
 		mfd->mdp.dma_fnc(mfd);
 	else
 		pr_warn("dma function not set for panel type=%d\n",
+#ifdef CONFIG_MACH_RCL
+				mfd->panel_info->type);
+#else
 				mfd->panel.type);
+#endif
 
 	return 0;
 }
@@ -3674,6 +3862,52 @@ void mdss_panelinfo_to_fb_var(struct mdss_panel_info *pinfo,
 		var->lower_margin);
 }
 
+#ifdef CONFIG_MACH_RCL
+static bool mdss_fb_pending_dfps(struct msm_fb_data_type *mfd)
+{
+	struct mdss_overlay_private *mdp5_data;
+	struct mdss_panel_info *pinfo = NULL;
+	u32 new_fps;
+	bool ret = false;
+
+	if (mfd == NULL)
+		return false;
+
+	pinfo = mfd->panel_info;
+
+	if (!pinfo->dynamic_fps || !pinfo->default_fps)
+		return false;
+
+	mdp5_data = mfd_to_mdp5_data(mfd);
+	if (!mdp5_data)
+		return false;
+
+	mutex_lock(&mdp5_data->dfps_lock);
+
+	if ((pinfo->dfps_update == DFPS_IMMEDIATE_PORCH_UPDATE_MODE_VFP) ||
+		(pinfo->dfps_update == DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP) ||
+		(pinfo->dfps_update ==
+			DFPS_IMMEDIATE_MULTI_UPDATE_MODE_CLK_HFP) ||
+		(pinfo->dfps_update ==
+			DFPS_IMMEDIATE_MULTI_MODE_HFP_CALC_CLK) ||
+		pinfo->dfps_update == DFPS_IMMEDIATE_CLK_UPDATE_MODE) {
+		if (pinfo->type == DTV_PANEL)
+			new_fps = pinfo->lcdc.frame_rate;
+		else
+			new_fps = mdss_panel_get_framerate(pinfo);
+	} else {
+		new_fps = pinfo->new_fps;
+	}
+
+	if (new_fps != pinfo->current_fps) {
+		ret = true;
+	}
+
+	mutex_unlock(&mdp5_data->dfps_lock);
+	return ret;
+}
+#endif
+
 /**
  * __mdss_fb_perform_commit() - process a frame to display
  * @mfd:	Framebuffer data structure for display
@@ -3693,9 +3927,23 @@ static int __mdss_fb_perform_commit(struct msm_fb_data_type *mfd)
 	sync_pt_data->flushed = false;
 
 	mutex_lock(&mfd->switch_lock);
+#ifdef CONFIG_MACH_RCL
+	if (mfd->switch_state == MDSS_MDP_WAIT_FOR_KICKOFF ||
+			(mfd->switch_state == MDSS_MDP_WAIT_FOR_VALIDATE &&
+				mfd->switch_new_mode != SWITCH_RESOLUTION)) {
+		new_dsi_mode = mfd->switch_new_mode;
+		if (new_dsi_mode == MIPI_VIDEO_PANEL && mdss_fb_pending_dfps(mfd) == true) {
+			// Send the dfps commands now since our DDIC sends command 10x faster in
+			// command mode as it does in video mode.
+			struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
+			mdss_mdp_ctl_update_fps(ctl);
+		}
+		dynamic_dsi_switch = 1;
+#else
 	if (mfd->switch_state == MDSS_MDP_WAIT_FOR_KICKOFF) {
 		dynamic_dsi_switch = 1;
 		new_dsi_mode = mfd->switch_new_mode;
+#endif
 	} else if (mfd->switch_state != MDSS_MDP_NO_UPDATE_REQUESTED) {
 		pr_err("invalid commit on fb%d with state = %d\n",
 			mfd->index, mfd->switch_state);
@@ -3704,15 +3952,43 @@ static int __mdss_fb_perform_commit(struct msm_fb_data_type *mfd)
 	}
 	mutex_unlock(&mfd->switch_lock);
 	if (dynamic_dsi_switch) {
+#ifdef CONFIG_MACH_RCL
+		// Make sure we have the correct fence thresholds set for the new mode
+		mdss_fb_set_mdp_sync_pt_threshold(mfd, mfd->switch_new_mode);
+#endif
+
 		MDSS_XLOG(mfd->index, mfd->split_mode, new_dsi_mode,
 			XLOG_FUNC_ENTRY);
 		pr_debug("Triggering dyn mode switch to %d\n", new_dsi_mode);
 		ret = mfd->mdp.mode_switch(mfd, new_dsi_mode);
+#ifdef CONFIG_MACH_RCL
+		if (!ret) {
+			mfd->pending_switch = false;
+
+			MDSS_XLOG(mfd->index, mfd->split_mode, new_dsi_mode, XLOG_FUNC_EXIT);
+			mfd->mdp.mode_switch_post(mfd, new_dsi_mode);
+			mutex_lock(&mfd->switch_lock);
+			mfd->switch_state = MDSS_MDP_NO_UPDATE_REQUESTED;
+			mutex_unlock(&mfd->switch_lock);
+
+			if (new_dsi_mode != SWITCH_RESOLUTION)
+				mfd->panel.type = new_dsi_mode;
+
+			// Notify any listeners that the mode switch is complete
+			sysfs_notify(&mfd->fbi->dev->kobj, NULL, "mode_switch_event");
+
+			pr_info("Dynamic mode switch to %d completed\n", new_dsi_mode);
+		} else {
+			pr_err("DSI mode switch has failed");
+		}
+#else
 		if (ret)
 			pr_err("DSI mode switch has failed");
 		else
 			mfd->pending_switch = false;
+#endif
 	}
+
 	if (fb_backup->disp_commit.flags & MDP_DISPLAY_COMMIT_OVERLAY) {
 		if (mfd->mdp.kickoff_fnc)
 			ret = mfd->mdp.kickoff_fnc(mfd,
@@ -3740,7 +4016,11 @@ skip_commit:
 	if (!ret)
 		mdss_fb_update_backlight(mfd);
 
+#ifdef CONFIG_MACH_RCL
+	if (dynamic_dsi_switch || IS_ERR_VALUE(ret) || !sync_pt_data->flushed) {
+#else
 	if (IS_ERR_VALUE(ret) || !sync_pt_data->flushed) {
+#endif
 		mdss_fb_release_kickoff(mfd);
 		mdss_fb_signal_timeline(sync_pt_data);
 
@@ -3748,6 +4028,7 @@ skip_commit:
 			(mfd->mdp.signal_retire_fence))
 			mfd->mdp.signal_retire_fence(mfd, 1);
 	}
+#ifndef CONFIG_MACH_RCL
 	if (dynamic_dsi_switch) {
 		MDSS_XLOG(mfd->index, mfd->split_mode, new_dsi_mode,
 			XLOG_FUNC_EXIT);
@@ -3759,7 +4040,7 @@ skip_commit:
 			mfd->panel.type = new_dsi_mode;
 		pr_debug("Dynamic mode switch completed\n");
 	}
-
+#endif
 	return ret;
 }
 
@@ -4782,8 +5063,11 @@ static int mdss_fb_atomic_commit_ioctl(struct fb_info *info,
 
 	ATRACE_BEGIN("ATOMIC_COMMIT");
 	ret = mdss_fb_atomic_commit(info, &commit, file);
-	if (ret)
+	if (ret) {
+		ATRACE_END("ATOMIC_COMMIT");
 		pr_err("atomic commit failed ret:%d\n", ret);
+		goto err;
+	}
 	ATRACE_END("ATOMIC_COMMIT");
 
 	if (layer_count) {
@@ -4862,7 +5146,11 @@ int mdss_fb_switch_check(struct msm_fb_data_type *mfd, u32 mode)
 	}
 	mutex_unlock(&mfd->switch_lock);
 
+#ifdef CONFIG_MACH_RCL
+	panel_type = mfd->panel_info->type;
+#else
 	panel_type = mfd->panel.type;
+#endif
 	if (panel_type != MIPI_VIDEO_PANEL && panel_type != MIPI_CMD_PANEL) {
 		pr_debug("Panel not in mipi video or cmd mode, cannot change\n");
 		return -EPERM;
@@ -4881,7 +5169,9 @@ static int mdss_fb_immediate_mode_switch(struct msm_fb_data_type *mfd, u32 mode)
 	else
 		tranlated_mode = MIPI_VIDEO_PANEL;
 
+#ifndef CONFIG_MACH_RCL
 	pr_debug("%s: Request to switch to %d,", __func__, tranlated_mode);
+#endif
 
 	ret = mdss_fb_switch_check(mfd, tranlated_mode);
 	if (ret)
@@ -4898,6 +5188,11 @@ static int mdss_fb_immediate_mode_switch(struct msm_fb_data_type *mfd, u32 mode)
 
 exit:
 	mutex_unlock(&mfd->switch_lock);
+#ifdef CONFIG_MACH_RCL
+	if (!ret)
+		pr_info("%s: Request to switch to %d,",
+				__func__, tranlated_mode);
+#endif
 	return ret;
 }
 
@@ -5064,6 +5359,29 @@ int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 		ret = mdss_fb_async_position_update_ioctl(info, argp);
 		break;
 
+#ifdef CONFIG_MACH_RCL
+	case MSMFB_RAZER_MODE_SWITCH: {
+		struct dynamic_mode_switch_data mode_data = {0, 0};
+		ret = copy_from_user(&mode_data, argp, sizeof(mode_data));
+		if (ret) {
+			pr_err("%s: MSMFB_RAZER_MODE_SWITCH ioctl failed\n", __func__);
+			goto exit;
+		}
+
+		ret = mdss_fb_mode_switch(mfd, mode_data.mode);
+		if (!ret) {
+			struct dynamic_fps_data dfps_data = {0};
+
+			pr_debug("%s: MSMFB_RAZER_MODE_SWITCH -- fps=%u", __func__, mode_data.fps);
+			if (mode_data.fps > 0) {
+				dfps_data.fps = mode_data.fps;
+				ret = mdss_fb_set_dfps_max(mfd, pdata, &dfps_data);
+			}
+		}
+		break;
+	}
+#endif
+
 	default:
 		if (mfd->mdp.ioctl_handler)
 			ret = mfd->mdp.ioctl_handler(mfd, cmd, argp);
@@ -5111,6 +5429,274 @@ static int mdss_fb_register_extra_panel(struct platform_device *pdev,
 
 	return 0;
 }
+
+#ifdef CONFIG_MACH_RCL
+static void cache_initial_timings(struct mdss_panel_data *pdata)
+{
+	if (!pdata->panel_info.default_fps) {
+		/*
+		 * This value will change dynamically once the
+		 * actual dfps update happen in hw.
+		 */
+		if (pdata->panel_info.type == DTV_PANEL)
+			pdata->panel_info.current_fps =
+				pdata->panel_info.lcdc.frame_rate;
+		else
+			pdata->panel_info.current_fps =
+				mdss_panel_get_framerate(&pdata->panel_info);
+		/*
+		 * Keep the initial fps and porch values for this panel before
+		 * any dfps update happen, this is to prevent losing precision
+		 * in further calculations.
+		 */
+		if (pdata->panel_info.type == DTV_PANEL)
+			pdata->panel_info.default_fps =
+				pdata->panel_info.lcdc.frame_rate;
+		else
+			pdata->panel_info.default_fps =
+				mdss_panel_get_framerate(&pdata->panel_info);
+
+		if (pdata->panel_info.dfps_update ==
+					DFPS_IMMEDIATE_PORCH_UPDATE_MODE_VFP) {
+			pdata->panel_info.saved_total =
+				mdss_panel_get_vtotal(&pdata->panel_info);
+			pdata->panel_info.saved_fporch =
+				pdata->panel_info.lcdc.v_front_porch;
+
+		} else if (pdata->panel_info.dfps_update ==
+				DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP ||
+			pdata->panel_info.dfps_update ==
+				DFPS_IMMEDIATE_MULTI_UPDATE_MODE_CLK_HFP ||
+			pdata->panel_info.dfps_update ==
+				DFPS_IMMEDIATE_MULTI_MODE_HFP_CALC_CLK) {
+			pdata->panel_info.saved_total =
+				mdss_panel_get_htotal(&pdata->panel_info, true);
+			pdata->panel_info.saved_fporch =
+				pdata->panel_info.lcdc.h_front_porch;
+		}
+	}
+}
+
+static inline void dfps_update_fps(struct mdss_panel_info *pinfo,
+				   u32 fps)
+{
+	if (pinfo->type == DTV_PANEL)
+		pinfo->lcdc.frame_rate = fps;
+	else
+		pinfo->mipi.frame_rate = fps;
+
+	pinfo->te.refx100 = fps * 100;
+}
+
+static int calc_extra_blanking(struct mdss_panel_data *pdata,
+			       u32 new_fps)
+{
+	int add_porches, diff;
+
+	/* calculate extra: lines for vfp-method, pixels for hfp-method */
+	diff = pdata->panel_info.default_fps - new_fps;
+	add_porches = mult_frac(pdata->panel_info.saved_total,
+		diff, new_fps);
+
+	return add_porches;
+}
+
+static void dfps_update_panel_params(struct mdss_panel_data *pdata,
+				     struct dynamic_fps_data *data)
+{
+	u32 new_fps = data->fps;
+
+	/* Keep initial values before any dfps update */
+	cache_initial_timings(pdata);
+
+	if (pdata->panel_info.dfps_update ==
+			DFPS_IMMEDIATE_PORCH_UPDATE_MODE_VFP) {
+		int add_v_lines;
+
+		/* calculate extra vfp lines */
+		add_v_lines = calc_extra_blanking(pdata, new_fps);
+
+		/* update panel info with new values */
+		pdata->panel_info.lcdc.v_front_porch =
+			pdata->panel_info.saved_fporch + add_v_lines;
+
+		dfps_update_fps(&pdata->panel_info, new_fps);
+
+		pdata->panel_info.prg_fet =
+			mdss_mdp_get_prefetch_lines(&pdata->panel_info, false);
+
+	} else if (pdata->panel_info.dfps_update ==
+			DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP) {
+		int add_h_pixels;
+
+		/* calculate extra hfp pixels */
+		add_h_pixels = calc_extra_blanking(pdata, new_fps);
+
+		/* update panel info */
+		pdata->panel_info.lcdc.h_front_porch =
+			pdata->panel_info.saved_fporch + add_h_pixels;
+
+		dfps_update_fps(&pdata->panel_info, new_fps);
+	} else if (pdata->panel_info.dfps_update ==
+		DFPS_IMMEDIATE_MULTI_UPDATE_MODE_CLK_HFP) {
+
+		pr_debug("hfp=%d, hbp=%d, hpw=%d, clk=%d, fps=%d\n",
+			data->hfp, data->hbp, data->hpw,
+			data->clk_rate, data->fps);
+
+		pdata->panel_info.lcdc.h_front_porch = data->hfp;
+		pdata->panel_info.lcdc.h_back_porch  = data->hbp;
+		pdata->panel_info.lcdc.h_pulse_width = data->hpw;
+
+		pdata->panel_info.clk_rate = data->clk_rate;
+		if (pdata->panel_info.type == DTV_PANEL)
+			pdata->panel_info.clk_rate *= 1000;
+
+		dfps_update_fps(&pdata->panel_info, new_fps);
+	} else if (pdata->panel_info.dfps_update ==
+		DFPS_IMMEDIATE_MULTI_MODE_HFP_CALC_CLK) {
+
+		pr_debug("hfp=%d, hbp=%d, hpw=%d, clk=%d, fps=%d\n",
+			data->hfp, data->hbp, data->hpw,
+			data->clk_rate, data->fps);
+
+		pdata->panel_info.lcdc.h_front_porch = data->hfp;
+		pdata->panel_info.lcdc.h_back_porch  = data->hbp;
+		pdata->panel_info.lcdc.h_pulse_width = data->hpw;
+
+		pdata->panel_info.clk_rate = data->clk_rate;
+
+		dfps_update_fps(&pdata->panel_info, new_fps);
+		mdss_panel_update_clk_rate(&pdata->panel_info, new_fps);
+	} else {
+		dfps_update_fps(&pdata->panel_info, new_fps);
+		mdss_panel_update_clk_rate(&pdata->panel_info, new_fps);
+	}
+}
+
+int mdss_fb_dfps_update_params(struct msm_fb_data_type *mfd,
+			       struct mdss_panel_data *pdata,
+			       struct dynamic_fps_data *dfps_data)
+{
+	struct fb_var_screeninfo *var = &mfd->fbi->var;
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
+	u32 dfps = 0;
+
+	if (dfps_data == NULL) {
+		return -EINVAL;
+	}
+	dfps = dfps_data->fps;
+
+	mutex_lock(&mdp5_data->dfps_lock);
+
+	pr_debug("new_fps:%d\n", dfps);
+
+	if (dfps < pdata->panel_info.min_fps) {
+		pr_debug("Unsupported FPS. min_fps = %d\n",
+				pdata->panel_info.min_fps);
+		mutex_unlock(&mdp5_data->dfps_lock);
+		return -EINVAL;
+	} else if (dfps > pdata->panel_info.max_fps) {
+		pr_debug("Unsupported FPS. Configuring to max_fps = %d\n",
+				pdata->panel_info.max_fps);
+		dfps = pdata->panel_info.max_fps;
+		dfps_data->fps = dfps;
+	}
+
+	dfps_update_panel_params(pdata, dfps_data);
+	if (pdata->next)
+		dfps_update_panel_params(pdata->next, dfps_data);
+
+	/*
+	 * Update the panel info in the upstream
+	 * data, so any further call to get the screen
+	 * info has the updated timings.
+	 */
+	mdss_panelinfo_to_fb_var(&pdata->panel_info, var);
+
+	MDSS_XLOG(dfps);
+	mutex_unlock(&mdp5_data->dfps_lock);
+
+	return 0;
+}
+
+int mdss_fb_set_dfps_max(struct msm_fb_data_type *mfd,
+			 struct mdss_panel_data *pdata,
+			 struct dynamic_fps_data *dfps_data)
+{
+	int panel_max_fps, panel_min_fps, current_fps;
+	int rc = 0;
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
+
+	if (dfps_data == NULL) {
+		return -EINVAL;
+	}
+
+	if (!mdp5_data->ctl || !mdss_mdp_ctl_is_power_on(mdp5_data->ctl) ||
+			mdss_panel_is_power_off(mfd->panel_power_state)) {
+		pr_debug("panel is off\n");
+		return 0;
+	}
+
+	if (!pdata->panel_info.dynamic_fps) {
+		pr_err_once("Dynamic fps not enabled for this panel\n");
+		return -EINVAL;
+	}
+
+	if (pdata->panel_info.type != MIPI_VIDEO_PANEL &&
+			pdata->panel_info.type != MIPI_CMD_PANEL) {
+		return -EINVAL;
+	}
+
+	if (pdata->panel_info.dfps_update == DFPS_IMMEDIATE_MULTI_UPDATE_MODE_CLK_HFP ||
+			pdata->panel_info.dfps_update == DFPS_IMMEDIATE_MULTI_MODE_HFP_CALC_CLK) {
+		pr_err("DFPS update mode not support for max fps\n");
+		return -EINVAL;
+	}
+
+	if (dfps_data->fps == 0) {
+		return -EINVAL;
+	}
+
+	panel_max_fps = mdss_panel_get_max_framerate(&pdata->panel_info);
+	if (dfps_data->fps == panel_max_fps) {
+		pr_debug("Max FPS is already %d\n", dfps_data->fps);
+		return 0;
+	}
+	panel_min_fps = mdss_panel_get_min_framerate(&pdata->panel_info);
+	if (dfps_data->fps < panel_min_fps) {
+		dfps_data->fps = panel_min_fps;
+	}
+
+	current_fps = mdss_panel_get_framerate(&pdata->panel_info);
+	if (dfps_data->fps < current_fps) {
+		rc = mdss_fb_dfps_update_params(mfd, pdata, dfps_data);
+		if (rc) {
+			pr_err("failed to set dfps params\n");
+			return rc;
+		}
+	}
+
+	mutex_lock(&mdp5_data->dfps_lock);
+
+	pdata->panel_info.max_fps = dfps_data->fps;
+	if (pdata->next) {
+		pdata->next->panel_info.max_fps = dfps_data->fps;
+	}
+
+	mutex_unlock(&mdp5_data->dfps_lock);
+
+	if (dfps_data->fps > current_fps) {
+		rc = mdss_fb_dfps_update_params(mfd, pdata, dfps_data);
+		if (rc) {
+			pr_err("failed to set dfps params\n");
+			return rc;
+		}
+	}
+
+	return 0;
+}
+#endif
 
 int mdss_register_panel(struct platform_device *pdev,
 	struct mdss_panel_data *pdata)

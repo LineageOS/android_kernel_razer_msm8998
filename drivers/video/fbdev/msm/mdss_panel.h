@@ -1,4 +1,5 @@
 /* Copyright (c) 2008-2018, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,7 +27,11 @@ struct panel_id {
 	u16 type;
 };
 
+#ifdef CONFIG_MACH_RCL
+#define DEFAULT_FRAME_RATE	120
+#else
 #define DEFAULT_FRAME_RATE	60
+#endif
 #define DEFAULT_ROTATOR_FRAME_RATE 120
 #define ROTATOR_LOW_FRAME_RATE 30
 
@@ -788,6 +793,10 @@ struct mdss_panel_info {
 	u32 brightness_max;
 	u32 bl_max;
 	u32 bl_min;
+#ifdef CONFIG_MACH_RCL
+	bool bl_skip_enabled;
+	u32 bl_skip[2];
+#endif
 	u32 fb_num;
 	u64 clk_rate;
 	u32 clk_min;
@@ -837,6 +846,9 @@ struct mdss_panel_info {
 	u32 mode_sel_state;
 	u32 min_fps;
 	u32 max_fps;
+#ifdef CONFIG_MACH_RCL
+	u32 avr_min_fps;
+#endif
 	u32 prg_fet;
 	struct mdss_panel_roi_alignment roi_alignment;
 
@@ -906,6 +918,9 @@ struct mdss_panel_info {
 	 * before or after the switch, during dynamic resolution switching
 	 */
 	bool send_pps_before_switch;
+#ifdef CONFIG_MACH_RCL
+	bool disable_sending_pps;
+#endif
 
 	struct lcd_panel_info lcdc;
 	struct fbc_panel_info fbc;
@@ -1017,6 +1032,48 @@ struct mdss_panel_debugfs_info {
 	u32 override_flag;
 	struct mdss_panel_debugfs_info *next;
 };
+
+#ifdef CONFIG_MACH_RCL
+static inline u32 mdss_panel_get_min_framerate(struct mdss_panel_info *panel_info)
+{
+	u32 frame_rate;
+
+	if (panel_info == NULL)
+		return 0;
+
+	switch (panel_info->type) {
+	case MIPI_VIDEO_PANEL:
+	case MIPI_CMD_PANEL:
+		frame_rate = panel_info->min_fps;
+		break;
+	default:
+		frame_rate = 0;
+		break;
+	}
+
+	return frame_rate;
+}
+
+static inline u32 mdss_panel_get_max_framerate(struct mdss_panel_info *panel_info)
+{
+	u32 frame_rate;
+
+	if (panel_info == NULL)
+		return 0;
+
+	switch (panel_info->type) {
+	case MIPI_VIDEO_PANEL:
+	case MIPI_CMD_PANEL:
+		frame_rate = panel_info->max_fps;
+		break;
+	default:
+		frame_rate = 0;
+		break;
+	}
+
+	return frame_rate;
+}
+#endif
 
 /**
  * mdss_get_panel_framerate() - get panel frame rate based on panel information
