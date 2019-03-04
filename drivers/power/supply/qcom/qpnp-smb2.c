@@ -123,6 +123,15 @@ static struct smb_params v1_params = {
 		.max_u	= 1575000,
 		.step_u	= 25000,
 	},
+#ifdef CONFIG_MACH_RCL
+	.jeita_fv_comp		= {
+		.name	= "jeita fv reduction",
+		.reg	= JEITA_FVCOMP_CFG_REG,
+		.min_u	= 0,
+		.max_u	= 475000,
+		.step_u	= 7500,
+	},
+#endif
 	.freq_buck		= {
 		.name	= "buck switching frequency",
 		.reg	= CFG_BUCKBOOST_FREQ_SELECT_BUCK_REG,
@@ -163,6 +172,10 @@ struct smb_dt_props {
 	int	wipower_max_uw;
 	int	min_freq_khz;
 	int	max_freq_khz;
+#ifdef CONFIG_MACH_RCL
+	int	jeita_fcc_comp;
+	int	jeita_fv_comp;
+#endif
 	struct	device_node *revid_dev_node;
 	int	float_option;
 	int	chg_inhibit_thr_mv;
@@ -327,6 +340,22 @@ static int smb2_parse_dt(struct smb2 *chip)
 
 	chg->fcc_stepper_mode = of_property_read_bool(node,
 					"qcom,fcc-stepping-enable");
+
+#ifdef CONFIG_MACH_RCL
+	rc = of_property_read_u32(node, "qcom,jeita-fcc-comp",
+			&chip->dt.jeita_fcc_comp);
+	if (rc < 0) {
+		pr_err("fg-fcc-comp unavailable, rc:%d\n", rc);
+		chip->dt.jeita_fcc_comp = -EINVAL;
+	}
+
+	rc = of_property_read_u32(node, "qcom,jeita-fv-comp",
+			&chip->dt.jeita_fv_comp);
+	if (rc < 0) {
+		pr_err("fg-fcc-comp unavailable, rc:%d\n", rc);
+		chip->dt.jeita_fv_comp = -EINVAL;
+	}
+#endif
 
 	return 0;
 }
@@ -1523,6 +1552,16 @@ static int smb2_init_hw(struct smb2 *chip)
 		return rc;
 	}
 
+#ifdef CONFIG_MACH_RCL
+	if (chip->dt.jeita_fcc_comp < 0)
+		smblib_get_charge_param(chg, &chg->param.jeita_cc_comp,
+					&chip->dt.jeita_fcc_comp);
+
+	if (chip->dt.jeita_fv_comp < 0)
+		smblib_get_charge_param(chg, &chg->param.jeita_fv_comp,
+					&chip->dt.jeita_fv_comp);
+#endif
+
 	chg->boost_threshold_ua = chip->dt.boost_threshold_ua;
 
 	rc = smblib_read(chg, APSD_RESULT_STATUS_REG, &stat);
@@ -1712,6 +1751,22 @@ static int smb2_init_hw(struct smb2 *chip)
 			rc);
 		return rc;
 	}
+
+#ifdef CONFIG_MACH_RCL
+	rc = smblib_set_charge_param(chg, &chg->param.jeita_cc_comp,
+			chip->dt.jeita_fcc_comp);
+	if (rc < 0) {
+		pr_err("Couldn't configure jeita fcc comp rc = %d\n", rc);
+		return rc;
+	}
+
+	rc = smblib_set_charge_param(chg, &chg->param.jeita_fv_comp,
+			chip->dt.jeita_fv_comp);
+	if (rc < 0) {
+		pr_err("Couldn't configure jeita fv comp rc = %d\n", rc);
+		return rc;
+	}
+#endif
 
 	rc = smblib_read(chg, USBIN_OPTIONS_2_CFG_REG, &chg->float_cfg);
 	if (rc < 0) {
