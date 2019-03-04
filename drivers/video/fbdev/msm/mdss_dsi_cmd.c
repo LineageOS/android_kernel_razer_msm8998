@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -767,7 +768,7 @@ int mdss_dsi_cmdlist_put(struct mdss_dsi_ctrl_pdata *ctrl,
 	clist->tot++;
 	if (clist->put == clist->get) {
 		/* drop the oldest one */
-		pr_debug("%s: DROP, tot=%d put=%d get=%d\n", __func__,
+		pr_warn("%s: DROP, tot=%d put=%d get=%d\n", __func__,
 			clist->tot, clist->put, clist->get);
 		clist->get++;
 		clist->get %= CMD_REQ_MAX;
