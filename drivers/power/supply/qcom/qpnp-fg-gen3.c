@@ -144,6 +144,38 @@
 #define FLOAT_VOLT_v2_WORD		16
 #define FLOAT_VOLT_v2_OFFSET		2
 
+/* WayneWCShiue - 9801-468 - [BAT] Jeita temperature protection */
+#define DEFAULT_CUTOFF_VOLT_MV		3200
+#define DEFAULT_EMPTY_VOLT_MV		2850
+#define DEFAULT_RECHARGE_VOLT_MV	4250
+#define DEFAULT_CHG_TERM_CURR_MA	100
+#define DEFAULT_CHG_TERM_BASE_CURR_MA	75
+#define DEFAULT_SYS_TERM_CURR_MA	-125
+#define DEFAULT_DELTA_SOC_THR		1
+#define DEFAULT_RECHARGE_SOC_THR	95
+#define DEFAULT_BATT_TEMP_COLD		0
+#define DEFAULT_BATT_TEMP_COOL		15
+#define DEFAULT_BATT_TEMP_WARM		45
+#define DEFAULT_BATT_TEMP_HOT		55
+#define DEFAULT_CL_START_SOC		15
+#define DEFAULT_CL_MIN_TEMP_DECIDEGC	150
+#define DEFAULT_CL_MAX_TEMP_DECIDEGC	450
+#define DEFAULT_CL_MAX_INC_DECIPERC	5
+#define DEFAULT_CL_MAX_DEC_DECIPERC	100
+#define DEFAULT_CL_MIN_LIM_DECIPERC	0
+#define DEFAULT_CL_MAX_LIM_DECIPERC	0
+#define BTEMP_DELTA_LOW			2
+#define BTEMP_DELTA_HIGH		10
+#define DEFAULT_ESR_FLT_TEMP_DECIDEGC	100
+#define DEFAULT_ESR_TIGHT_FLT_UPCT	3907
+#define DEFAULT_ESR_BROAD_FLT_UPCT	99610
+#define DEFAULT_ESR_TIGHT_LT_FLT_UPCT	48829
+#define DEFAULT_ESR_BROAD_LT_FLT_UPCT	148438
+#define DEFAULT_ESR_CLAMP_MOHMS		20
+#define DEFAULT_ESR_PULSE_THRESH_MA	110
+#define DEFAULT_ESR_MEAS_CURR_MA	120
+/* end 9801-468 */
+
 static int fg_decode_voltage_15b(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val);
 static int fg_decode_value_16b(struct fg_sram_param *sp,
@@ -917,6 +949,14 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 	const char *data;
 	int rc, len;
 
+/* DY-FixMergeConflict*[ */
+	rc = fg_get_batt_id(chip);
+	if (rc < 0) {
+		pr_err("Error in getting batt_id rc:%d\n", rc);
+		return rc;
+	}
+/* DY-FixMergeConflict*] */
+
 	batt_node = of_find_node_by_name(node, "qcom,battery-data");
 	if (!batt_node) {
 		pr_err("Batterydata not available\n");
@@ -925,6 +965,16 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 
 	profile_node = of_batterydata_get_best_profile(batt_node,
 				chip->batt_id_ohms / 1000, NULL);
+
+	/* WayneWCShiue - 9801-1665 - use default batt_id to try again */
+	if(!profile_node) {
+		pr_err("Error: cannot read battery profile, use default profile\n");
+		chip->batt_id_ohms = 240000;
+		profile_node = of_batterydata_get_best_profile(batt_node,
+				chip->batt_id_ohms / 1000, NULL);
+	}
+	/* end 9801-1665 */
+
 	if (IS_ERR(profile_node))
 		return PTR_ERR(profile_node);
 
@@ -971,6 +1021,35 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 		pr_err("battery profile incorrect size: %d\n", len);
 		return -EINVAL;
 	}
+
+	/* WayneWCShiue - 9801-468 - [BAT] Jeita temperature protection */
+	chip->dt.jeita_thresholds[JEITA_COLD] = DEFAULT_BATT_TEMP_COLD;
+	chip->dt.jeita_thresholds[JEITA_COOL] = DEFAULT_BATT_TEMP_COOL;
+	chip->dt.jeita_thresholds[JEITA_WARM] = DEFAULT_BATT_TEMP_WARM;
+	chip->dt.jeita_thresholds[JEITA_HOT] = DEFAULT_BATT_TEMP_HOT;
+	if (of_property_count_elems_of_size(profile_node, "qcom,fg-jeita-thresholds",
+		sizeof(u32)) == NUM_JEITA_LEVELS) {
+		rc = of_property_read_u32_array(profile_node,
+				"qcom,fg-jeita-thresholds",
+				chip->dt.jeita_thresholds, NUM_JEITA_LEVELS);
+		if (rc < 0) {
+			pr_err("Error reading Jeita thresholds, default values will be used rc:%d\n",
+				rc);
+			return rc;
+		}
+	} else {
+		pr_err("Error reading Jeita thresholds, the size is not %d\n", NUM_JEITA_LEVELS);
+		return 0;
+	}
+	/* end 9801-468 */
+
+	/* WayneWCShiue - 9801-8555 - [BAT] Inform Battery Protect AP once the battery can only charge to 4.1V */
+	chip->bp.fih_jeita_full_capacity_warm_en = of_property_read_bool(profile_node,
+						"fih,jeita-full-capacity-warm-en");
+
+	chip->bp.fih_jeita_full_capacity_cool_en = of_property_read_bool(profile_node,
+						"fih,jeita-full-capacity-cool-en");
+	/* end 9801-8555 */
 
 	chip->profile_available = true;
 	memcpy(chip->batt_profile, data, len);
@@ -1094,14 +1173,79 @@ static void fg_notify_charger(struct fg_chip *chip)
 		return;
 	}
 
-	prop.intval = chip->bp.fastchg_curr_ma * 1000;
+	/* WayneWCShiue - 9801-3730 - Change JEITA dynamically */
+	prop.intval = (chip->bp.diff_jeita_fn_en == true) ? 1 : 0;
 	rc = power_supply_set_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &prop);
+			POWER_SUPPLY_PROP_JEITA_DIFF_FN_EN, &prop);
 	if (rc < 0) {
-		pr_err("Error in setting constant_charge_current_max property on batt_psy, rc=%d\n",
-			rc);
-		return;
+		pr_err("Error in setting diff_jeita_fn_en property on batt_psy, rc=%d\n", rc);
 	}
+
+	if(chip->bp.diff_jeita_fn_en) {
+		prop.intval = chip->bp.jeita_fcc_comp_cool;
+		rc = power_supply_set_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_JEITA_FCC_COOL, &prop);
+		if (rc < 0) {
+			pr_err("Error in setting jeita_fcc_comp_cool property on batt_psy, rc=%d\n", rc);
+		}
+
+		prop.intval = chip->bp.jeita_fcc_comp_warm;
+		rc = power_supply_set_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_JEITA_FCC_WARM, &prop);
+		if (rc < 0) {
+			pr_err("Error in setting jeita_fcc_comp_warm property on batt_psy, rc=%d\n", rc);
+		}
+
+		prop.intval = chip->bp.jeita_fv_comp_cool;
+		rc = power_supply_set_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_JEITA_FV_COOL, &prop);
+		if (rc < 0) {
+			pr_err("Error in setting jeita_fv_comp_cool property on batt_psy, rc=%d\n", rc);
+		}
+
+		prop.intval = chip->bp.jeita_fv_comp_warm;
+		rc = power_supply_set_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_JEITA_FV_WARM, &prop);
+		if (rc < 0) {
+			pr_err("Error in setting jeita_fv_comp_warm property on batt_psy, rc=%d\n", rc);
+		}
+	}
+	/* end 9801-3730 */
+
+	/* WayneWCShiue - 9801-8555 - [BAT] Inform Battery Protect AP once the battery can only charge to 4.1V */
+	if(chip->bp.fih_jeita_full_capacity_warm_en == true)
+		prop.intval = 1;
+	else
+		prop.intval = 0;
+	rc = power_supply_set_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_JEITA_FULL_CAPACITY_WARM_EN, &prop);
+	if (rc < 0) {
+		pr_err("Error in setting fih_jeita_full_cap_warm_en property on batt_psy, rc=%d\n", rc);
+	}
+
+	if(chip->bp.fih_jeita_full_capacity_cool_en == true)
+		prop.intval = 1;
+	else
+		prop.intval = 0;
+	rc = power_supply_set_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_JEITA_FULL_CAPACITY_COOL_EN, &prop);
+	if (rc < 0) {
+		pr_err("Error in setting fih_jeita_full_cap_cool_en property on batt_psy, rc=%d\n", rc);
+	}
+	/* end 9801-8555 */
+
+	/* WayneWCShiue - 9801-694 - [BAT] If the property < 0, means there is no such property in dtsi, ignore it. */
+	if(chip->bp.fastchg_curr_ma >= 0) {
+		prop.intval = chip->bp.fastchg_curr_ma * 1000;
+		rc = power_supply_set_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &prop);
+		if (rc < 0) {
+			pr_err("Error in setting constant_charge_current_max property on batt_psy, rc=%d\n",
+				rc);
+			return;
+		}
+	}
+	/* end 9801-105 */
 
 	fg_dbg(chip, FG_STATUS, "Notified charger on float voltage and FCC\n");
 }
@@ -2435,7 +2579,7 @@ static void status_change_work(struct work_struct *work)
 		goto out;
 	}
 
-	rc = power_supply_get_property(chip->batt_psy, POWER_SUPPLY_PROP_STATUS,
+	rc = power_supply_get_property(chip->batt_psy, POWER_SUPPLY_PROP_STATUS_INTERNAL, //Device was discharging when battery capacity is above 60% and temperature is warm.
 			&prop);
 	if (rc < 0) {
 		pr_err("Error in getting charging status, rc=%d\n", rc);
@@ -2668,18 +2812,46 @@ static void profile_load_work(struct work_struct *work)
 
 	vote(chip->awake_votable, PROFILE_LOAD, true, 0);
 
-	rc = fg_get_batt_id(chip);
-	if (rc < 0) {
-		pr_err("Error in getting battery id, rc:%d\n", rc);
-		goto out;
-	}
-
 	rc = fg_get_batt_profile(chip);
 	if (rc < 0) {
 		pr_warn("profile for batt_id=%dKOhms not found..using OTP, rc:%d\n",
 			chip->batt_id_ohms / 1000, rc);
 		goto out;
 	}
+	if (chip->batt_id_ohms == 0)
+		goto out;
+	if (!chip->profile_available)
+		goto out;
+
+	/* WayneWCShiue - 9801-7860 - We move jeita threshold to battery profile, so we need to write it after reading battery profile */
+	get_temp_setpoint(chip->dt.jeita_thresholds[JEITA_COLD], &val);
+	rc = fg_write(chip, BATT_INFO_JEITA_TOO_COLD(chip), &val, 1);
+	if (rc < 0) {
+		pr_err("Error in writing jeita_cold, rc=%d\n", rc);
+		goto out;
+	}
+
+	get_temp_setpoint(chip->dt.jeita_thresholds[JEITA_COOL], &val);
+	rc = fg_write(chip, BATT_INFO_JEITA_COLD(chip), &val, 1);
+	if (rc < 0) {
+		pr_err("Error in writing jeita_cool, rc=%d\n", rc);
+		goto out;
+	}
+
+	get_temp_setpoint(chip->dt.jeita_thresholds[JEITA_WARM], &val);
+	rc = fg_write(chip, BATT_INFO_JEITA_HOT(chip), &val, 1);
+	if (rc < 0) {
+		pr_err("Error in writing jeita_warm, rc=%d\n", rc);
+		goto out;
+	}
+
+	get_temp_setpoint(chip->dt.jeita_thresholds[JEITA_HOT], &val);
+	rc = fg_write(chip, BATT_INFO_JEITA_TOO_HOT(chip), &val, 1);
+	if (rc < 0) {
+		pr_err("Error in writing jeita_hot, rc=%d\n", rc);
+		goto out;
+	}
+	/* end 9801-7860 */
 
 	if (!chip->profile_available)
 		goto out;
@@ -3756,6 +3928,8 @@ static int fg_hw_init(struct fg_chip *chip)
 		}
 	}
 
+	/* WayneWCShiue - 9801-7860 - We move jeita threshold to battery profile, so we need to write it after reading battery profile */
+	#if 0
 	get_temp_setpoint(chip->dt.jeita_thresholds[JEITA_COLD], &val);
 	rc = fg_write(chip, BATT_INFO_JEITA_TOO_COLD(chip), &val, 1);
 	if (rc < 0) {
@@ -3783,6 +3957,8 @@ static int fg_hw_init(struct fg_chip *chip)
 		pr_err("Error in writing jeita_hot, rc=%d\n", rc);
 		return rc;
 	}
+	#endif
+	/* end 9801-7860 */
 
 	if (chip->pmic_rev_id->pmic_subtype == PMI8998_SUBTYPE) {
 		chip->esr_timer_charging_default[TIMER_RETRY] =
@@ -4048,6 +4224,14 @@ static irqreturn_t fg_delta_batt_temp_irq_handler(int irq, void *data)
 	if (abs(chip->last_batt_temp - batt_temp) > 30)
 		pr_warn("Battery temperature last:%d current: %d\n",
 			chip->last_batt_temp, batt_temp);
+
+	/* WayneWCShiue - 9802-1713 - Add periodical checker mechanism for charging */
+	rc = power_supply_set_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_FIH_PERIOD_CHECKER, &prop);
+	/* end 9802-1713 */
+
+	power_supply_changed(chip->batt_psy);
+
 	return IRQ_HANDLED;
 }
 
@@ -4086,6 +4270,9 @@ static irqreturn_t fg_delta_msoc_irq_handler(int irq, void *data)
 {
 	struct fg_chip *chip = data;
 	int rc;
+	/* WayneWCShiue - 9802-1713 - Add periodical checker mechanism for charging */
+	union power_supply_propval prop = {0, };
+	/* end 9802-1713 */
 
 	fg_dbg(chip, FG_IRQ, "irq %d triggered\n", irq);
 	fg_cycle_counter_update(chip);
@@ -4112,6 +4299,11 @@ static irqreturn_t fg_delta_msoc_irq_handler(int irq, void *data)
 	rc = fg_adjust_timebase(chip);
 	if (rc < 0)
 		pr_err("Error in adjusting timebase, rc=%d\n", rc);
+
+	/* WayneWCShiue - 9802-1713 - Add periodical checker mechanism for charging */
+	rc = power_supply_set_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_FIH_PERIOD_CHECKER, &prop);
+	/* end 9802-1713 */
 
 	if (batt_psy_initialized(chip))
 		power_supply_changed(chip->batt_psy);
@@ -4375,35 +4567,6 @@ static int fg_parse_ki_coefficients(struct fg_chip *chip)
 	return 0;
 }
 
-#define DEFAULT_CUTOFF_VOLT_MV		3200
-#define DEFAULT_EMPTY_VOLT_MV		2850
-#define DEFAULT_RECHARGE_VOLT_MV	4250
-#define DEFAULT_CHG_TERM_CURR_MA	100
-#define DEFAULT_CHG_TERM_BASE_CURR_MA	75
-#define DEFAULT_SYS_TERM_CURR_MA	-125
-#define DEFAULT_DELTA_SOC_THR		1
-#define DEFAULT_RECHARGE_SOC_THR	95
-#define DEFAULT_BATT_TEMP_COLD		0
-#define DEFAULT_BATT_TEMP_COOL		5
-#define DEFAULT_BATT_TEMP_WARM		45
-#define DEFAULT_BATT_TEMP_HOT		50
-#define DEFAULT_CL_START_SOC		15
-#define DEFAULT_CL_MIN_TEMP_DECIDEGC	150
-#define DEFAULT_CL_MAX_TEMP_DECIDEGC	450
-#define DEFAULT_CL_MAX_INC_DECIPERC	5
-#define DEFAULT_CL_MAX_DEC_DECIPERC	100
-#define DEFAULT_CL_MIN_LIM_DECIPERC	0
-#define DEFAULT_CL_MAX_LIM_DECIPERC	0
-#define BTEMP_DELTA_LOW			2
-#define BTEMP_DELTA_HIGH		10
-#define DEFAULT_ESR_FLT_TEMP_DECIDEGC	100
-#define DEFAULT_ESR_TIGHT_FLT_UPCT	3907
-#define DEFAULT_ESR_BROAD_FLT_UPCT	99610
-#define DEFAULT_ESR_TIGHT_LT_FLT_UPCT	48829
-#define DEFAULT_ESR_BROAD_LT_FLT_UPCT	148438
-#define DEFAULT_ESR_CLAMP_MOHMS		20
-#define DEFAULT_ESR_PULSE_THRESH_MA	110
-#define DEFAULT_ESR_MEAS_CURR_MA	120
 static int fg_parse_dt(struct fg_chip *chip)
 {
 	struct device_node *child, *revid_node, *node = chip->dev->of_node;
@@ -4569,6 +4732,10 @@ static int fg_parse_dt(struct fg_chip *chip)
 	else
 		chip->dt.rsense_sel = (u8)temp & SOURCE_SELECT_MASK;
 
+	/* WayneWCShiue - 9801-468 - [BAT] Jeita temperature protection.
+	  * Move the setting of temperature to batteryData
+	  */
+	#if 0
 	chip->dt.jeita_thresholds[JEITA_COLD] = DEFAULT_BATT_TEMP_COLD;
 	chip->dt.jeita_thresholds[JEITA_COOL] = DEFAULT_BATT_TEMP_COOL;
 	chip->dt.jeita_thresholds[JEITA_WARM] = DEFAULT_BATT_TEMP_WARM;
@@ -4582,6 +4749,8 @@ static int fg_parse_dt(struct fg_chip *chip)
 			pr_warn("Error reading Jeita thresholds, default values will be used rc:%d\n",
 				rc);
 	}
+	#endif
+	/* [END] */
 
 	if (of_property_count_elems_of_size(node,
 		"qcom,battery-thermal-coefficients",
@@ -4866,6 +5035,11 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	INIT_WORK(&chip->status_change_work, status_change_work);
 	INIT_DELAYED_WORK(&chip->ttf_work, ttf_work);
 	INIT_DELAYED_WORK(&chip->sram_dump_work, sram_dump_work);
+	rc = fg_get_batt_profile(chip);
+	if (rc < 0) {
+		pr_warn("profile for batt_id=%dKOhms not found..using OTP, rc:%d\n",
+			chip->batt_id_ohms / 1000, rc);
+	}
 
 	rc = fg_memif_init(chip);
 	if (rc < 0) {
@@ -4942,6 +5116,7 @@ static int fg_gen3_probe(struct platform_device *pdev)
 			pr_err("Error in configuring ESR filter rc:%d\n", rc);
 	}
 
+	dev_set_name(chip->dev, "qpnp_fg-gen3");
 	device_init_wakeup(chip->dev, true);
 	schedule_delayed_work(&chip->profile_load_work, 0);
 

@@ -63,6 +63,9 @@ struct step_chg_info {
 	int			jeita_fcc_index;
 	int			jeita_fv_index;
 	int			step_index;
+	/* WayneWCShiue - 9801-1214 - Only use hysteresis when JEITA change from noraml to cool or warm */
+	int			last_jeita_status;
+	/* end 9801-1214 */
 
 	struct votable		*fcc_votable;
 	struct votable		*fv_votable;
@@ -83,27 +86,26 @@ static struct step_chg_info *the_chip;
  * range data must be in increasing ranges and shouldn't overlap
  */
 static struct step_chg_cfg step_chg_config = {
-	.psy_prop	= POWER_SUPPLY_PROP_VOLTAGE_NOW,
-	.prop_name	= "VBATT",
-	.hysteresis	= 100000, /* 100mV */
+/*
+ *	.psy_prop	= POWER_SUPPLY_PROP_VOLTAGE_NOW,
+ *	.prop_name	= "VBATT",
+ *	.hysteresis	= 100000, // 100mV
+ *	.fcc_cfg	= {
+ *		// VBAT_LOW	VBAT_HIGH	FCC
+ *		{3600000,	4000000,	3000000},
+ *		{4001000,	4200000,	2800000},
+ *		{4201000,	4400000,	2000000},
+ *	},
+*/
+
+	//SOC STEP-CHG configuration example.
+	.psy_prop = POWER_SUPPLY_PROP_CAPACITY,
+	.prop_name = "SOC",
 	.fcc_cfg	= {
-		/* VBAT_LOW	VBAT_HIGH	FCC */
-		{3600000,	4000000,	3000000},
-		{4001000,	4200000,	2800000},
-		{4201000,	4400000,	2000000},
+		//SOC_LOW	SOC_HIGH	FCC
+		{0,		25,		3900000},
+		{26,		100,		1900000},
 	},
-	/*
-	 *	SOC STEP-CHG configuration example.
-	 *
-	 *	.psy_prop = POWER_SUPPLY_PROP_CAPACITY,
-	 *	.prop_name = "SOC",
-	 *	.fcc_cfg	= {
-	 *		//SOC_LOW	SOC_HIGH	FCC
-	 *		{20,		70,		3000000},
-	 *		{70,		90,		2750000},
-	 *		{90,		100,		2500000},
-	 *	},
-	 */
 };
 
 /*
@@ -118,25 +120,24 @@ static struct step_chg_cfg step_chg_config = {
 static struct jeita_fcc_cfg jeita_fcc_config = {
 	.psy_prop	= POWER_SUPPLY_PROP_TEMP,
 	.prop_name	= "BATT_TEMP",
-	.hysteresis	= 10, /* 1degC hysteresis */
+	.hysteresis	= 30, /* 3degC hysteresis */
 	.fcc_cfg	= {
 		/* TEMP_LOW	TEMP_HIGH	FCC */
-		{0,		100,		600000},
-		{101,		200,		2000000},
-		{201,		450,		3000000},
-		{451,		550,		600000},
+		{0,		       159,		750000},
+		{160,		449,		3900000},
+		{450,		549,		1900000},
 	},
 };
 
 static struct jeita_fv_cfg jeita_fv_config = {
 	.psy_prop	= POWER_SUPPLY_PROP_TEMP,
 	.prop_name	= "BATT_TEMP",
-	.hysteresis	= 10, /* 1degC hysteresis */
+	.hysteresis	= 30, /* 3degC hysteresis */
 	.fv_cfg		= {
-		/* TEMP_LOW	TEMP_HIGH	FCC */
-		{0,		100,		4200000},
-		{101,		450,		4400000},
-		{451,		550,		4200000},
+		/* TEMP_LOW	TEMP_HIGH	FV */
+		{0,		       149,		4400000},
+		{150,		449,		4400000},
+		{450,		549,		4100000},
 	},
 };
 
@@ -153,7 +154,10 @@ static bool is_batt_available(struct step_chg_info *chip)
 
 static int get_val(struct range_data *range, int hysteresis, int current_index,
 		int threshold,
-		int *new_index, int *val)
+		int *new_index, int *val,
+		/* WayneWCShiue - 9801-1214 - Only use hysteresis when JEITA change from noraml to cool or warm */
+		int last_jeita_status, int current_jeita_status)
+		/* end 9801-1214 */
 {
 	int i;
 
@@ -182,6 +186,15 @@ static int get_val(struct range_data *range, int hysteresis, int current_index,
 	 * Check for hysteresis if it in the neighbourhood
 	 * of our current index.
 	 */
+
+	/* WayneWCShiiue - If the health is from GOOD to WARM or COOL, we need to react immediately, ignore the hysteresis */
+	if(last_jeita_status == POWER_SUPPLY_HEALTH_GOOD &&
+	  (current_jeita_status == POWER_SUPPLY_HEALTH_COOL || current_jeita_status == POWER_SUPPLY_HEALTH_WARM)) {
+		return 0;
+	}
+	/* END - WayneWCShiiue */
+
+
 	if (*new_index == current_index + 1) {
 		if (threshold < range[*new_index].low_threshold + hysteresis) {
 			/*
@@ -192,7 +205,7 @@ static int get_val(struct range_data *range, int hysteresis, int current_index,
 			*val = range[current_index].value;
 		}
 	} else if (*new_index == current_index - 1) {
-		if (threshold > range[*new_index].high_threshold - hysteresis) {
+		if (threshold > range[*new_index].high_threshold - hysteresis + 1 ) { /* WayneWCShiue - we need to add 1 to avoid 1degC delay from JEITA WARM to GOOD*/
 			/*
 			 * stay in the current index, threshold is not lower
 			 * by hysteresis amount
@@ -235,11 +248,16 @@ static int handle_step_chg_config(struct step_chg_info *chip)
 		return rc;
 	}
 
+	/* WayneWCShiue - 9801-1214 - Only use hysteresis when JEITA change from noraml to cool or warm */
 	rc = get_val(step_chg_config.fcc_cfg, step_chg_config.hysteresis,
 			chip->step_index,
 			pval.intval,
 			&chip->step_index,
-			&fcc_ua);
+			&fcc_ua,
+			POWER_SUPPLY_HEALTH_GOOD,
+			POWER_SUPPLY_HEALTH_GOOD);
+	/* end 9801-1214 */
+
 	if (rc < 0) {
 		/* remove the vote if no step-based fcc is found */
 		if (chip->fcc_votable)
@@ -269,6 +287,10 @@ reschedule:
 static int handle_jeita(struct step_chg_info *chip)
 {
 	union power_supply_propval pval = {0, };
+	/* WayneWCShiue - 9801-1214 - Only use hysteresis when JEITA change from noraml to cool or warm */
+	union power_supply_propval jeita_pval = {0, };
+	/* end 9801-1214 */
+
 	int rc = 0, fcc_ua = 0, fv_uv = 0;
 	u64 elapsed_us;
 
@@ -299,11 +321,25 @@ static int handle_jeita(struct step_chg_info *chip)
 		return rc;
 	}
 
+	/* WayneWCShiue - 9801-1214 - Only use hysteresis when JEITA change from noraml to cool or warm */
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_HEALTH, &jeita_pval);
+
+	if(rc < 0) {
+		pr_err("Could not get battery health in handle_jeita\n");
+		return rc;
+	}
+
 	rc = get_val(jeita_fcc_config.fcc_cfg, jeita_fcc_config.hysteresis,
 			chip->jeita_fcc_index,
 			pval.intval,
 			&chip->jeita_fcc_index,
-			&fcc_ua);
+			&fcc_ua,
+			chip->last_jeita_status,
+			jeita_pval.intval
+			);
+	/* end 9801-1214 */
+
 	if (rc < 0) {
 		/* remove the vote if no step-based fcc is found */
 		if (chip->fcc_votable)
@@ -319,11 +355,21 @@ static int handle_jeita(struct step_chg_info *chip)
 
 	vote(chip->fcc_votable, JEITA_VOTER, true, fcc_ua);
 
+	/* WayneWCShiue - 9801-1214 - Only use hysteresis when JEITA change from noraml to cool or warm */
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_HEALTH, &jeita_pval);
+
 	rc = get_val(jeita_fv_config.fv_cfg, jeita_fv_config.hysteresis,
 			chip->jeita_fv_index,
 			pval.intval,
 			&chip->jeita_fv_index,
-			&fv_uv);
+			&fv_uv,
+			chip->last_jeita_status,
+			jeita_pval.intval
+			);
+
+	/* end 9801-1214 */
+
 	if (rc < 0) {
 		/* remove the vote if no step-based fcc is found */
 		if (chip->fv_votable)
@@ -341,6 +387,9 @@ static int handle_jeita(struct step_chg_info *chip)
 		jeita_fv_config.prop_name, pval.intval, fcc_ua, fv_uv);
 
 update_time:
+	/* WayneWCShiue - 9801-1214 - Only use hysteresis when JEITA change from noraml to cool or warm */
+	chip->last_jeita_status = jeita_pval.intval;
+	/* end 9801-1214 */
 	chip->jeita_last_update_time = ktime_get();
 	return 0;
 
@@ -374,7 +423,9 @@ static void status_change_work(struct work_struct *work)
 	if (rc < 0)
 		pr_err("Couldn't handle step rc = %d\n", rc);
 
+
 	reschedule_us = min(reschedule_jeita_work_us, reschedule_step_work_us);
+
 	if (reschedule_us == 0)
 		__pm_relax(chip->step_chg_ws);
 	else
