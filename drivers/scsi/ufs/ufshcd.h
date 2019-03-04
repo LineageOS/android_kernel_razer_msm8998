@@ -559,6 +559,9 @@ struct debugfs_files {
 	struct fault_attr fail_attr;
 #endif
 	bool is_sys_suspended;
+#ifdef CONFIG_FIH_UFSINFO
+	struct dentry * dump_device_health_desc;
+#endif
 };
 
 /* tag stats statistics types */
@@ -855,6 +858,7 @@ struct ufs_hba {
 	/* Work Queues */
 	struct work_struct eh_work;
 	struct work_struct eeh_work;
+	struct work_struct rls_work;
 
 	/* HBA Errors */
 	u32 errors;
@@ -954,6 +958,7 @@ struct ufs_hba {
 	
 	int			latency_hist_enabled;
 	struct io_latency_state io_lat_s;
+	bool restore_needed;
 };
 
 static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)
@@ -1157,6 +1162,11 @@ out:
 }
 
 int ufshcd_read_device_desc(struct ufs_hba *hba, u8 *buf, u32 size);
+
+#ifdef CONFIG_FIH_UFSINFO
+int ufshcd_read_geometry_desc(struct ufs_hba *hba, u8 *buf, u32 size);
+int ufshcd_read_device_health_desc(struct ufs_hba *hba, u8 *buf, u32 size);
+#endif
 
 static inline bool ufshcd_is_hs_mode(struct ufs_pa_layer_attr *pwr_info)
 {

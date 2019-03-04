@@ -1492,6 +1492,7 @@ static int wlfw_wlan_mode_send_sync_msg(enum wlfw_driver_mode_enum_v01 mode)
 	if (ret < 0) {
 		icnss_pr_err("Send mode req failed, mode: %d ret: %d\n",
 			     mode, ret);
+		panic("icnss: Send mode req failed"); //Qualcomm debug NB1-3262 case 02862009
 		goto out;
 	}
 

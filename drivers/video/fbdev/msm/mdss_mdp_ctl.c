@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3274,6 +3275,7 @@ static void __dsc_setup_dual_lm_single_display(struct mdss_mdp_ctl *ctl,
 		writel_relaxed(0x0, mdata->mdp_base + MDSS_MDP_REG_DCE_SEL);
 	}
 
+	mdss_panel_dsc_parameters_calc(dsc);
 	mdss_panel_dsc_update_pic_dim(dsc, pic_width, pic_height);
 
 	intf_ip_w = this_frame_slices * dsc->slice_width;
@@ -3831,6 +3833,15 @@ int mdss_mdp_ctl_reconfig(struct mdss_mdp_ctl *ctl,
 {
 	void *tmp;
 	int ret = 0;
+	int retire_cnt = 0;
+	struct msm_fb_data_type *mfd = NULL;
+	struct mdss_overlay_private *mdp5_data = NULL;
+
+	if (!ctl || !ctl->mfd) {
+		return -EINVAL;
+	}
+	mfd = ctl->mfd;
+	mdp5_data = mfd_to_mdp5_data(mfd);
 
 	/*
 	 * Switch first to prevent deleting important data in the case
@@ -3845,6 +3856,31 @@ int mdss_mdp_ctl_reconfig(struct mdss_mdp_ctl *ctl,
 	/* if only changing resolution there is no need for intf reconfig */
 	if (!ctl->is_video_mode == (pdata->panel_info.type == MIPI_CMD_PANEL))
 		goto skip_intf_reconfig;
+
+	/*
+	 * If retire fences are still active, then signal the timeline since
+	 * we should only be reconfiguring at the start of a new commit or
+	 * on a blank/unblank event.
+	 */
+	mutex_lock(&mfd->mdp_sync_pt_data.sync_mutex);
+	retire_cnt = mdp5_data->retire_cnt;
+	mutex_unlock(&mfd->mdp_sync_pt_data.sync_mutex);
+	if (retire_cnt) {
+		ATRACE_BEGIN("flush_retire_work");
+		if (mfd->mdp.signal_retire_fence) {
+			mfd->mdp.signal_retire_fence(mfd, retire_cnt);
+		}
+
+		/*
+		 * the retire work can still schedule after above retire_signal
+		 * api call. Flush workqueue guarantees that current caller
+		 * context is blocked till retire_work finishes. Any work
+		 * schedule after flush call should not cause any issue because
+		 * retire_signal api checks for retire_cnt with sync_mutex lock.
+		 */
+		flush_kthread_work(&mdp5_data->vsync_work);
+		ATRACE_END("flush_retire_work");
+	}
 
 	/*
 	 * Intentionally not clearing stop function, as stop will
@@ -4353,6 +4389,12 @@ static int mdss_mdp_ctl_start_sub(struct mdss_mdp_ctl *ctl, bool handoff)
 	 * (2) continuous splash finished.
 	 */
 	if (handoff || !ctl->panel_data->panel_info.cont_splash_enabled) {
+		if (ctl->pending_mode_switch == MIPI_VIDEO_PANEL) {
+			struct mdss_panel_info *pinfo = &ctl->panel_data->panel_info;
+			if (is_dsc_compression(pinfo)){
+				mdss_mdp_ctl_dsc_setup(ctl, pinfo);
+			}
+		}
 		if (ctl->ops.start_fnc)
 			ret = ctl->ops.start_fnc(ctl);
 		else
@@ -4391,7 +4433,8 @@ static int mdss_mdp_ctl_start_sub(struct mdss_mdp_ctl *ctl, bool handoff)
 		outsize = (mixer->height << 16) | mixer->width;
 		mdp_mixer_write(mixer, MDSS_MDP_REG_LM_OUT_SIZE, outsize);
 
-		if (is_dsc_compression(pinfo)) {
+		if (is_dsc_compression(pinfo) &&
+				ctl->pending_mode_switch != MIPI_VIDEO_PANEL) {
 			mdss_mdp_ctl_dsc_setup(ctl, pinfo);
 		} else if (pinfo->compression_mode == COMPRESSION_FBC) {
 			ret = mdss_mdp_ctl_fbc_enable(1, ctl->mixer_left,
@@ -4459,6 +4502,14 @@ int mdss_mdp_ctl_start(struct mdss_mdp_ctl *ctl, bool handoff)
 		} else if (is_panel_split_link(ctl->mfd)) {
 			mdss_mdp_ctl_pp_split_display_enable(true, ctl);
 		}
+	}
+
+	/* Need to add the vsync handler now that we are up and running */
+	if (ctl->need_vsync_on && ctl->ops.add_vsync_handler) {
+		pr_debug("%s: add vsync handlers now\n", __func__);
+		ctl->ops.add_vsync_handler(ctl,
+				&ctl->vsync_handler);
+		ctl->need_vsync_on = false;
 	}
 
 	mdss_mdp_hist_intr_setup(&mdata->hist_intr, MDSS_IRQ_RESUME);
@@ -5606,9 +5657,18 @@ int mdss_mdp_ctl_update_fps(struct mdss_mdp_ctl *ctl)
 		return 0;
 	}
 
+	if (ctl->mfd->switch_new_mode == MIPI_CMD_PANEL &&
+			ctl->mfd->panel.type == MIPI_VIDEO_PANEL) {
+		// Wait till we switch to command mode before we update the FPS
+		pr_warn("%s: wait till we swich to command mode before updating FPS\n", __func__);
+		return 0;
+	}
+
 	mdp5_data = mfd_to_mdp5_data(ctl->mfd);
 	if (!mdp5_data)
 		return -ENODEV;
+
+	ATRACE_FUNC();
 
 	/*
 	 * Panel info is already updated with the new fps info,
@@ -5634,7 +5694,6 @@ int mdss_mdp_ctl_update_fps(struct mdss_mdp_ctl *ctl)
 
 	pr_debug("fps new:%d old:%d\n", new_fps,
 		pinfo->current_fps);
-
 	if (new_fps == pinfo->current_fps) {
 		pr_debug("FPS is already %d\n", new_fps);
 		ret = 0;
@@ -5643,13 +5702,15 @@ int mdss_mdp_ctl_update_fps(struct mdss_mdp_ctl *ctl)
 
 	ret = ctl->ops.config_fps_fnc(ctl, new_fps);
 	if (!ret)
-		pr_debug("fps set to %d\n", new_fps);
+		pr_debug("%s: fps set to %d\n", __func__, new_fps);
 	else
-		pr_err("Failed to configure %d fps rc=%d\n",
+		pr_err("%s: Failed to configure %d fps rc=%d\n", __func__,
 			new_fps, ret);
 
 exit:
 	mutex_unlock(&mdp5_data->dfps_lock);
+
+	ATRACE_END(__func__);
 	return ret;
 }
 
@@ -5812,15 +5873,21 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 	sctl = mdss_mdp_get_split_ctl(ctl);
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
 
-	if (ctl->ops.avr_ctrl_fnc) {
+	if (test_bit(MDSS_CAPS_AVR_SUPPORTED,
+				mdata->mdss_caps_map) &&
+			ctl->avr_info.avr_enabled &&
+			ctl->ops.avr_ctrl_fnc) {
+		ATRACE_BEGIN("commit avr setup");
 		/* avr_ctrl_fnc will configure both master & slave */
 		ret = ctl->ops.avr_ctrl_fnc(ctl, true);
 		if (ret) {
 			pr_err("error configuring avr ctrl registers ctl=%d err=%d\n",
 				ctl->num, ret);
 			mutex_unlock(&ctl->lock);
+			ATRACE_END("commit avr setup");
 			return ret;
 		}
+		ATRACE_END("commit avr setup");
 	}
 
 	mutex_lock(&ctl->flush_lock);
