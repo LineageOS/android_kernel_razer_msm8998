@@ -35,6 +35,10 @@
 #include <soc/qcom/watchdog.h>
 #include <soc/qcom/minidump.h>
 
+#ifdef CONFIG_FIH_APR
+#include <fih/fih_rere.h>
+#endif
+
 #define EMERGENCY_DLOAD_MAGIC1    0x322A4F99
 #define EMERGENCY_DLOAD_MAGIC2    0xC67E4350
 #define EMERGENCY_DLOAD_MAGIC3    0x77777777
@@ -294,6 +298,11 @@ static void msm_restart_prepare(const char *cmd)
 				(cmd != NULL && cmd[0] != '\0'));
 	}
 
+#ifdef CONFIG_FIH_APR
+	if (in_panic)
+		need_warm_reset = true;
+#endif
+
 	/* Hard reset the PMIC unless memory contents must be maintained. */
 	if (need_warm_reset) {
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
@@ -336,6 +345,10 @@ static void msm_restart_prepare(const char *cmd)
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
 		} else {
+#ifdef CONFIG_FIH_APR
+			qpnp_pon_set_restart_reason(
+				FIH_RERE_REBOOT_DEVICE); // Normal reboot
+#endif
 			__raw_writel(0x77665501, restart_reason);
 		}
 	}
@@ -403,6 +416,9 @@ static void do_msm_poweroff(void)
 	set_dload_mode(0);
 	scm_disable_sdi();
 	qpnp_pon_system_pwr_off(PON_POWER_OFF_SHUTDOWN);
+#ifdef CONFIG_FIH_APR
+	qpnp_pon_set_restart_reason(FIH_RERE_ANDROID_MODE); // Normal boot
+#endif
 
 	halt_spmi_pmic_arbiter();
 	deassert_ps_hold();
