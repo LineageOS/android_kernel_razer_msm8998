@@ -159,6 +159,8 @@ static int fb_event_callback(struct notifier_block *self,
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	struct mdss_panel_info *pinfo;
 	struct msm_fb_data_type *mfd;
+	bool disable_status_check = false;
+	int rc = 0;
 
 	if (!evdata) {
 		pr_err("%s: event data not available\n", __func__);
@@ -182,9 +184,11 @@ static int fb_event_callback(struct notifier_block *self,
 	if ((!(pinfo->esd_check_enabled) &&
 			dsi_status_disable) ||
 			(dsi_status_disable == DSI_STATUS_CHECK_DISABLE)) {
-		pr_debug("ESD check is disabled.\n");
+		pr_debug("%s: ESD check is disabled.\n", __func__);
 		cancel_delayed_work(&pdata->check_status);
-		return NOTIFY_DONE;
+
+		disable_status_check = true;
+		rc = NOTIFY_DONE;
 	}
 
 	pdata->mfd = evdata->info->par;
@@ -196,21 +200,35 @@ static int fb_event_callback(struct notifier_block *self,
 
 		switch (*blank) {
 		case FB_BLANK_UNBLANK:
-			schedule_delayed_work(&pdata->check_status,
-				msecs_to_jiffies(interval));
+			if (!disable_status_check) {
+				schedule_delayed_work(&pdata->check_status,
+					msecs_to_jiffies(interval));
+			}
+
+			if (ctrl_pdata->configure_ambient_mode != NULL) {
+				pr_debug("%s: disabling ambient mode\n", __func__);
+				ctrl_pdata->configure_ambient_mode(ctrl_pdata, false);
+			}
 			break;
 		case FB_BLANK_POWERDOWN:
 		case FB_BLANK_HSYNC_SUSPEND:
 		case FB_BLANK_VSYNC_SUSPEND:
 		case FB_BLANK_NORMAL:
-			cancel_delayed_work(&pdata->check_status);
+			if (!disable_status_check) {
+				cancel_delayed_work(&pdata->check_status);
+			}
+
+			if (*blank == FB_BLANK_NORMAL && ctrl_pdata->configure_ambient_mode != NULL) {
+				pr_debug("%s: enabling ambient mode\n", __func__);
+				ctrl_pdata->configure_ambient_mode(ctrl_pdata, true);
+			}
 			break;
 		default:
 			pr_err("Unknown case in FB_EVENT_BLANK event\n");
 			break;
 		}
 	}
-	return 0;
+	return rc;
 }
 
 static int param_dsi_status_disable(const char *val, struct kernel_param *kp)
