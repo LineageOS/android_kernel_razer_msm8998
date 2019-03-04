@@ -589,6 +589,8 @@ static int qpnp_rtc_probe(struct platform_device *pdev)
 
 	dev_set_drvdata(&pdev->dev, rtc_dd);
 
+	dev_set_name(&pdev->dev, "qpnp_rtc");
+
 	/* Register the RTC device */
 	rtc_dd->rtc = rtc_device_register("qpnp_rtc", &pdev->dev,
 					  rtc_ops, THIS_MODULE);
@@ -598,9 +600,6 @@ static int qpnp_rtc_probe(struct platform_device *pdev)
 		rc = PTR_ERR(rtc_dd->rtc);
 		goto fail_rtc_enable;
 	}
-
-	/* Init power_on_alarm after adding rtc device */
-	power_on_alarm_init();
 
 	/* Request the alarm IRQ */
 	rc = request_any_context_irq(rtc_dd->rtc_alarm_irq,

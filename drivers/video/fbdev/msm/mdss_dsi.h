@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017-2018 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -361,6 +362,7 @@ struct dsi_panel_timing {
 	char t_clk_post;
 	char t_clk_pre;
 	struct dsi_panel_cmds on_cmds;
+	struct dsi_panel_cmds post_dms_on_cmds;
 	struct dsi_panel_cmds post_panel_on_cmds;
 	struct dsi_panel_cmds switch_cmds;
 };
@@ -394,6 +396,21 @@ struct dsi_err_container {
 	s64 err_time[MAX_ERR_INDEX];
 };
 
+struct night_mode_config {
+	struct dsi_panel_cmds on_cmds;
+	struct dsi_panel_cmds off_cmds;
+	struct dsi_panel_cmds *profiles_cmds;
+	int profiles_cnt;
+	int current_profile;
+	bool enabled;
+};
+
+struct refresh_rate_config {
+	struct dsi_panel_cmds config_cmds;
+	u32 rate;
+	bool enabled;
+};
+
 #define DSI_CTRL_LEFT		DSI_CTRL_0
 #define DSI_CTRL_RIGHT		DSI_CTRL_1
 #define DSI_CTRL_CLK_SLAVE	DSI_CTRL_RIGHT
@@ -425,6 +442,10 @@ struct mdss_dsi_ctrl_pdata {
 	int (*check_read_status) (struct mdss_dsi_ctrl_pdata *pdata);
 	int (*cmdlist_commit)(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp);
 	void (*switch_mode) (struct mdss_panel_data *pdata, int mode);
+	int (*apply_ie_sre_mode)(struct mdss_panel_data *pdata, u32 mode);
+	void (*night_mode_ctl) (struct mdss_panel_data *pdata, int profile_id, bool panel_on);
+	int (*refresh_rate_ctl) (struct mdss_panel_data *pdata, int rate);
+	int (*configure_ambient_mode)(struct mdss_dsi_ctrl_pdata *ctrl_pdata, bool enable);
 	struct mdss_panel_data panel_data;
 	unsigned char *ctrl_base;
 	struct dss_io_data ctrl_io;
@@ -500,6 +521,14 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds lp_on_cmds;
 	struct dsi_panel_cmds lp_off_cmds;
 	struct dsi_panel_cmds status_cmds;
+
+	struct dsi_panel_cmds ambient_idle_on_cmds;
+	struct dsi_panel_cmds ambient_idle_off_cmds;
+	bool ambient_en;
+
+	struct dsi_panel_cmds ie_sre_cmds;
+	u32 ie_sre_mode;
+
 	u32 *status_valid_params;
 	u32 *status_cmds_rlen;
 	u32 *status_value;
@@ -591,6 +620,9 @@ struct mdss_dsi_ctrl_pdata {
 	bool update_phy_timing; /* flag to recalculate PHY timings */
 
 	bool phy_power_off;
+
+	struct night_mode_config night_mode_cfg;
+	struct refresh_rate_config refresh_rate_cfg;
 };
 
 struct dsi_status_data {
