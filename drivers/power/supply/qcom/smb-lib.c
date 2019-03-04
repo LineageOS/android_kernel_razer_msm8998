@@ -40,6 +40,9 @@
 				__func__, ##__VA_ARGS__);	\
 	} while (0)
 
+#define RAZER_CHARGE_LIMIT_MAX_DEFAULT 70
+#define RAZER_CHARGE_LIMIT_DROPDOWN_DEFAULT 65
+
 static bool is_secure(struct smb_charger *chg, int addr)
 {
 	if (addr == SHIP_MODE_REG || addr == FREQ_CLK_DIV_REG)
@@ -587,6 +590,10 @@ static int smblib_notifier_call(struct notifier_block *nb,
 
 	if (!chg->pl.psy && !strcmp(psy->desc->name, "parallel"))
 		chg->pl.psy = psy;
+
+	/* Do updates for charging limit if necessary */
+	if (chg->razer_charge_limit_enable)
+		schedule_work(&chg->razer_charge_limit_update_work);
 
 	return NOTIFY_OK;
 }
@@ -1640,7 +1647,7 @@ int smblib_get_prop_batt_status(struct smb_charger *chg,
 
 	rc = smblib_read(chg, BATTERY_CHARGER_STATUS_7_REG, &stat);
 	if (rc < 0) {
-		smblib_err(chg, "Couldn't read BATTERY_CHARGER_STATUS_2 rc=%d\n",
+		smblib_err(chg, "Couldn't read BATTERY_CHARGER_STATUS_7 rc=%d\n",
 				rc);
 			return rc;
 	}
@@ -2380,6 +2387,235 @@ static int smblib_get_prop_dfp_mode(struct smb_charger *chg)
 	return POWER_SUPPLY_TYPEC_NONE;
 }
 
+/* WayneWCShiue - 9802-1713 - Add periodical checker mechanism for charging */
+#define RETRY_TIMES 3
+void FIH_chg_reEnable(struct smb_charger *chg) {
+	int rc = 0;
+	int retry = 0;
+
+	smblib_err(chg, "Try to do the FIH_chg_reEnable\n");
+
+	/* Executing the FIH recharge workaround would break the vote system */
+	if(chg->razer_charge_limit_active) {
+		return;
+	}
+
+	for(retry = 1; retry <= RETRY_TIMES; retry++) {
+		rc = smblib_masked_write(chg, CHARGING_ENABLE_CMD_REG, CHARGING_ENABLE_CMD_BIT, 0);
+		if (rc < 0) {
+			smblib_err(chg, "Cannot set CHARGING_ENABLE_CMD_BIT to 0. rc=%d, retry = %d\n", rc, retry);
+			msleep(100);
+		} else {
+			break;
+		}
+	}
+
+	for(retry = 1; retry <= RETRY_TIMES; retry++) {
+		rc = smblib_masked_write(chg, CHARGING_ENABLE_CMD_REG, CHARGING_ENABLE_CMD_BIT, CHARGING_ENABLE_CMD_BIT);
+		if (rc < 0) {
+			smblib_err(chg, "Cannot set CHARGING_ENABLE_CMD_BIT to 1. rc=%d, retry = %d\n", rc, retry);
+			msleep(100);
+		} else {
+			break;
+		}
+	}
+}
+
+void FIH_USBIN_reEnable(struct smb_charger *chg) {
+	int rc = 0;
+	int retry = 0;
+
+	smblib_err(chg, "Try to do the FIH_USBIN_reEnable\n");
+
+	/* Executing the FIH recharge workaround would break the vote system */
+	if(chg->razer_charge_limit_active) {
+		return;
+	}
+
+	for(retry = 1; retry <= RETRY_TIMES; retry++) {
+		rc = smblib_masked_write(chg, USBIN_CMD_IL_REG, USBIN_SUSPEND_BIT, USBIN_SUSPEND_BIT);
+		if (rc < 0) {
+			smblib_err(chg, "Cannot set USBIN_SUSPEND_BIT to 1. rc=%d, retry = %d\n", rc, retry);
+			msleep(100);
+		} else {
+			break;
+		}
+	}
+
+	for(retry = 1; retry <= RETRY_TIMES; retry++) {
+		rc = smblib_masked_write(chg, USBIN_CMD_IL_REG, USBIN_SUSPEND_BIT, 0);
+		if (rc < 0) {
+			smblib_err(chg, "Cannot set USBIN_SUSPEND_BIT to 0. rc=%d, retry = %d\n", rc, retry);
+			msleep(100);
+		} else {
+			break;
+		}
+	}
+}
+
+#define ABNORMAL_VOLTAGE_THRESHOLD 4200000
+#define CHG_RE_ENABLE_LIMIT 10
+void FIH_chg_abnormal_check(struct smb_charger *chg)
+{
+	union power_supply_propval prop = {0, };
+	int charge_status = 0;
+	int ibat = 0;
+	int vbat = 0;
+	u8 jeita_status = 0;
+	bool jeita_hit = false;
+	int rc = 0;
+
+	if(chg->fih_chg_abnormal_check_en == false)
+		return;
+
+	prop.intval = 0;
+	rc = smblib_get_prop_usb_present(chg, &prop);
+	if(rc < 0) {
+		pr_err("Cannot read usb present in %s\n", __func__);
+		return;
+	}
+	if(prop.intval == 0)
+		return;
+
+	prop.intval = 0;
+	rc = smblib_get_prop_batt_status(chg, &prop);
+	if(rc < 0) {
+		pr_err("Cannot read batt_status in %s\n", __func__);
+		return;
+	}
+	charge_status = prop.intval;
+
+
+	prop.intval = 0;
+	rc = smblib_get_prop_batt_voltage_now(chg, &prop);
+	if(rc < 0) {
+		pr_err("Cannot read vbat in %s\n", __func__);
+		return;
+	}
+	vbat = prop.intval;
+
+	prop.intval = 0;
+	rc = smblib_get_prop_batt_current_now(chg, &prop);
+	if(rc < 0) {
+		pr_err("Cannot read ibat in %s\n", __func__);
+		return;
+	}
+	ibat = prop.intval;
+
+	rc = smblib_read(chg, BATTERY_CHARGER_STATUS_2_REG, &jeita_status);
+	if(rc < 0) {
+		pr_err("Cannot read battery charger status in %s\n", __func__);
+		return;
+	}
+	jeita_hit = (jeita_status & BAT_TEMP_STATUS_MASK) == 0x0 ? false : true;
+
+	if(ibat > 0 && vbat < ABNORMAL_VOLTAGE_THRESHOLD && jeita_hit == false
+		&& chg->fih_reEnable_max_limit <= CHG_RE_ENABLE_LIMIT && !chg->razer_charge_limit_active)
+	{
+		chg->fih_reEnable_max_limit++;
+		pr_err("The vbat = %d, but the ibat is %d, fih_reEnable_limit = %d, tyr to re-enable charging and USBIN\n", vbat, ibat, chg->fih_reEnable_max_limit);
+		FIH_chg_reEnable(chg);
+		FIH_USBIN_reEnable(chg);
+	}
+}
+/* end 9802-1713 */
+
+/* WayneWCShiue - 9801-8555 - [BAT] Inform Battery Protect AP once the battery can only charge to 4.1V */
+/* 1. The charger is online
+  * 2. The charging status is FULL or DISCHARGING
+  * 3. Msoc is lower than 94%
+  * 4. The JEITA is under JEITA_WARM or JEITA_COOL, return JEITA_FULL_CAP_WARM or JEITA_FULL_CAP_COOL
+  * 5. The JEITA is normal status, return JEITA_FULL_CAP_RECHARGE
+*/
+#define JEITA_FULL_RECHARGE_SOC 99
+#define JEITA_FULL_CAP_NONE 0
+#define JEITA_FULL_CAP_WARM 1
+#define JEITA_FULL_CAP_COOL 2
+#define FULL_CAP_RECHARGE 3
+int  FIH_check_chg_status(struct smb_charger *chg)
+{
+	union power_supply_propval prop = {0, };
+	int rc = 0;
+	u8 jeita_status =0;
+	int charge_status = 0;
+	bool usb_present = false;
+	bool wireless_present = false;
+	bool isCharge = false;
+	int msoc = 0;
+
+	rc = smblib_get_prop_usb_present(chg, &prop);
+	if(rc < 0) {
+		pr_err("Cannot read smblib_get_prop_usb_present in FIH_check_chg_status\n");
+	} else {
+		usb_present = (prop.intval == 1) ? true : false;
+	}
+
+	prop.intval = 0;
+	rc = smblib_get_prop_dc_present(chg, &prop);
+	if(rc < 0) {
+		pr_err("Cannot read smblib_get_prop_dc_present in FIH_check_chg_status\n");
+	} else {
+		wireless_present = (prop.intval == 1) ? true : false;
+	}
+
+	isCharge = usb_present || wireless_present;
+	if(isCharge == false)
+		return JEITA_FULL_CAP_NONE;
+
+	prop.intval = 0;
+	rc = smblib_get_prop_batt_status(chg, &prop);
+	if(rc < 0) {
+		pr_err("Cannot read batt_status in FIH_check_chg_status\n");
+		return JEITA_FULL_CAP_NONE;
+	}
+	charge_status = prop.intval;
+	if(charge_status != POWER_SUPPLY_STATUS_DISCHARGING && charge_status != POWER_SUPPLY_STATUS_FULL)
+		return JEITA_FULL_CAP_NONE;
+
+	prop.intval = 0;
+	rc = smblib_get_prop_batt_capacity(chg, &prop);
+	if(rc < 0) {
+		pr_err("Cannot read battery capacity in FIH_check_chg_status\n");
+		return JEITA_FULL_CAP_NONE;
+	}
+	msoc = prop.intval;
+	if(msoc >= JEITA_FULL_RECHARGE_SOC)
+		return JEITA_FULL_CAP_NONE;
+
+	rc = smblib_read(chg, BATTERY_CHARGER_STATUS_2_REG, &jeita_status);
+	if(rc < 0) {
+		pr_err("Cannot read BATTERY_CHARGER_STATUS_2_REG in FIH_check_chg_status\n");
+		return JEITA_FULL_CAP_NONE;
+	}
+
+	if(chg->fih_jeita_full_capacity_warm_en == true && (jeita_status & BAT_TEMP_STATUS_HOT_SOFT_LIMIT_BIT)) {
+		pr_debug("JEITA_FULL_CAP_WARM HIT !!\n");
+		return JEITA_FULL_CAP_WARM;
+	}
+
+	if(chg->fih_jeita_full_capacity_cool_en == true && (jeita_status & BAT_TEMP_STATUS_COLD_SOFT_LIMIT_BIT)) {
+		pr_debug("JEITA_FULL_CAP_COOL HIT !!\n");
+		return JEITA_FULL_CAP_COOL;
+	}
+
+	if((jeita_status & BAT_TEMP_STATUS_MASK) == 0x0) {
+		pr_debug("Workaround: try to recharge battery\n");
+		return FULL_CAP_RECHARGE;
+	}
+
+	return JEITA_FULL_CAP_NONE;
+}
+
+void FIH_soft_JEITA_recharge_check(struct smb_charger *chg) {
+	int jeita_full_status = 0;
+
+	jeita_full_status = FIH_check_chg_status(chg);
+	if(jeita_full_status == FULL_CAP_RECHARGE) {
+		FIH_chg_reEnable(chg);
+	}
+}
+/* end 9801-8555 */
+
 static int smblib_get_prop_typec_mode(struct smb_charger *chg)
 {
 	if (chg->typec_status[3] & UFP_DFP_MODE_STATUS_BIT)
@@ -2609,9 +2845,32 @@ int smblib_set_prop_sdp_current_max(struct smb_charger *chg,
 				    const union power_supply_propval *val)
 {
 	int rc = 0;
+       /* WayneWCShiue - 9801-7524 - Adjust ICL according by Vrd */
+       int typec_mode = 0;
+       bool legacy_cable = 0;
+       union power_supply_propval final_val = {0, };
+       /* end 9801-7524 */
 
 	if (!chg->pd_active) {
 		rc = smblib_handle_usb_current(chg, val->intval);
+               /* WayneWCShiue - 9801-7524 - Adjust ICL according by Vrd */
+               final_val.intval = val->intval;
+               typec_mode = smblib_get_prop_ufp_mode(chg);
+               legacy_cable = (bool)(chg->typec_status[4] & TYPEC_LEGACY_CABLE_STATUS_BIT);
+               if(!legacy_cable) { // it's a C to C cable, the charging current should be determined by typeC mode
+                       if (typec_mode == POWER_SUPPLY_TYPEC_SOURCE_MEDIUM)
+                               final_val.intval = 1500000;
+
+                       if (typec_mode == POWER_SUPPLY_TYPEC_SOURCE_HIGH)
+                               final_val.intval = 3000000;
+              } else { // it's a C to A cable, we only allow the ICL to 900 mA
+                       if (typec_mode == POWER_SUPPLY_TYPEC_SOURCE_MEDIUM || typec_mode == POWER_SUPPLY_TYPEC_SOURCE_HIGH)
+                               final_val.intval = 900000;
+               }
+
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
+				true, final_val.intval);
+		/* end 9801-7524 */
 	} else if (chg->system_suspend_supported) {
 		if (val->intval <= USBIN_25MA)
 			rc = vote(chg->usb_icl_votable,
@@ -3000,6 +3259,8 @@ int smblib_set_prop_pd_in_hard_reset(struct smb_charger *chg,
 	return rc;
 }
 
+/* WayneWCShiue - 9801-1214 - Use FIH_soft_JEITA_recharge_check to instead of Qualcomm's function */
+#if 0
 static int smblib_recover_from_soft_jeita(struct smb_charger *chg)
 {
 	u8 stat_1, stat_2;
@@ -3044,6 +3305,8 @@ static int smblib_recover_from_soft_jeita(struct smb_charger *chg)
 
 	return 0;
 }
+#endif
+/* end 9801-1214 */
 
 /***********************
 * USB MAIN PSY GETTERS *
@@ -3236,14 +3499,25 @@ irqreturn_t smblib_handle_batt_temp_changed(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
-	int rc;
+	union power_supply_propval val = {0, };
+	/* WayneWCShiue - 9801-1214 - Use FIH_soft_JEITA_recharge_check to instead of Qualcomm's function */
+	// int rc;
+	/* end 9801-1214 */
 
+	/* WayneWCShiue - 9801-8555 - [BAT] Inform Battery Protect AP once the battery can only charge to 4.1V */
+	//FIH_soft_JEITA_recharge_check(chg);
+	/* end 9801-8555 */
+
+	/* WayneWCShiue - 9801-1214 - Use FIH_soft_JEITA_recharge_check to instead of Qualcomm's function */
+	#if 0
 	rc = smblib_recover_from_soft_jeita(chg);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't recover chg from soft jeita rc=%d\n",
 				rc);
 		return IRQ_HANDLED;
 	}
+	#endif
+	/* end 9801-1214 */
 
 	rerun_election(chg->fcc_votable);
 	power_supply_changed(chg->batt_psy);
@@ -3390,6 +3664,10 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 	power_supply_changed(chg->usb_psy);
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
 					vbus_rising ? "attached" : "detached");
+
+	/* WayneWCShiue - 9802-1713 - Add periodical checker mechanism for charging */
+	chg->fih_reEnable_max_limit = 0;
+	/* end FIH - 9802-1713 */
 }
 
 irqreturn_t smblib_handle_usb_plugin(int irq, void *data)
@@ -3639,8 +3917,10 @@ static void smblib_handle_hvdcp_detect_done(struct smb_charger *chg,
 
 static void smblib_force_legacy_icl(struct smb_charger *chg, int pst)
 {
-	int typec_mode;
+	/* WayneWCShiue - 9801-6004 - Cannot meet the requirement of Google Dual-port Type-C charger */
+	int typec_mode = 0;
 	int rp_ua;
+	/* end 9801-6004 */
 
 	/* while PD is active it should have complete ICL control */
 	if (chg->pd_active)
@@ -3665,6 +3945,16 @@ static void smblib_force_legacy_icl(struct smb_charger *chg, int pst)
 		typec_mode = smblib_get_prop_typec_mode(chg);
 		rp_ua = get_rp_based_dcp_current(chg, typec_mode);
 		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, rp_ua);
+		/* WayneWCShiue - 9801-6004 - Cannot meet the requirement of Google Dual-port Type-C charger */
+		typec_mode = smblib_get_prop_ufp_mode(chg);
+		if (typec_mode == POWER_SUPPLY_TYPEC_SOURCE_MEDIUM) {
+			vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, TYPEC_MEDIUM_CURRENT_UA);
+		} else if (typec_mode == POWER_SUPPLY_TYPEC_SOURCE_HIGH) {
+			vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, TYPEC_HIGH_CURRENT_UA);
+		} else {
+			vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, TYPEC_MEDIUM_CURRENT_UA);
+		}
+		/* end 9801-6004 */
 		break;
 	case POWER_SUPPLY_TYPE_USB_FLOAT:
 		/*
@@ -4068,9 +4358,33 @@ static void smblib_handle_typec_cc_state_change(struct smb_charger *chg)
 				smblib_typec_mode_name[chg->typec_mode]);
 }
 
+irqreturn_t smblib_handle_usb_typec_change_for_uusb(struct smb_charger *chg)
+{
+	int rc;
+	u8 stat;
+
+	rc = smblib_read(chg, TYPE_C_STATUS_3_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read TYPE_C_STATUS_3 rc=%d\n", rc);
+		return IRQ_HANDLED;
+	}
+	smblib_dbg(chg, PR_REGISTER, "TYPE_C_STATUS_3 = 0x%02x OTG=%d\n",
+		stat, !!(stat & (U_USB_GND_NOVBUS_BIT | U_USB_GND_BIT)));
+
+	extcon_set_cable_state_(chg->extcon, EXTCON_USB_HOST,
+			!!(stat & (U_USB_GND_NOVBUS_BIT | U_USB_GND_BIT)));
+	power_supply_changed(chg->usb_psy);
+
+	return IRQ_HANDLED;
+}
+
 static void smblib_usb_typec_change(struct smb_charger *chg)
 {
 	int rc;
+
+	/* WayneWCShiue - 9801-6004 - Cannot meet the requirement of Google Dual-port Type-C charger */
+	int typec_mode = 0;
+	/* end 9801-6004 */
 
 	rc = smblib_multibyte_read(chg, TYPE_C_STATUS_1_REG,
 							chg->typec_status, 5);
@@ -4087,6 +4401,17 @@ static void smblib_usb_typec_change(struct smb_charger *chg)
 	if (chg->typec_status[3] & TYPEC_VCONN_OVERCURR_STATUS_BIT)
 		schedule_work(&chg->vconn_oc_work);
 
+	/* WayneWCShiue - 9801-6004 - Cannot meet the requirement of Google Dual-port Type-C charger */
+	typec_mode = smblib_get_prop_ufp_mode(chg);
+	if (typec_mode == POWER_SUPPLY_TYPEC_SOURCE_MEDIUM) {
+		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, TYPEC_MEDIUM_CURRENT_UA);
+	} else if (typec_mode == POWER_SUPPLY_TYPEC_SOURCE_HIGH) {
+		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, TYPEC_HIGH_CURRENT_UA);
+	} else {
+		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, TYPEC_MEDIUM_CURRENT_UA);
+	}
+	/* end 9801-6004 */
+
 	power_supply_changed(chg->usb_psy);
 }
 
@@ -4096,11 +4421,7 @@ irqreturn_t smblib_handle_usb_typec_change(int irq, void *data)
 	struct smb_charger *chg = irq_data->parent_data;
 
 	if (chg->micro_usb_mode) {
-		cancel_delayed_work_sync(&chg->uusb_otg_work);
-		vote(chg->awake_votable, OTG_DELAY_VOTER, true, 0);
-		smblib_dbg(chg, PR_INTERRUPT, "Scheduling OTG work\n");
-		schedule_delayed_work(&chg->uusb_otg_work,
-				msecs_to_jiffies(chg->otg_delay_ms));
+		smblib_handle_usb_typec_change_for_uusb(chg);
 		return IRQ_HANDLED;
 	}
 
@@ -4384,6 +4705,17 @@ static void rdstd_cc2_detach_work(struct work_struct *work)
 
 rerun:
 	schedule_work(&chg->rdstd_cc2_detach_work);
+}
+
+static void razer_charge_limit_update_work(struct work_struct *work)
+{
+
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+						razer_charge_limit_update_work);
+
+	/* Verify that batt_psy init is complete and call our handler */
+	if (chg->batt_psy)
+		razer_charge_limit_update(chg);
 }
 
 static void smblib_otg_oc_exit(struct smb_charger *chg, bool success)
@@ -4848,6 +5180,15 @@ int smblib_init(struct smb_charger *chg)
 	INIT_WORK(&chg->legacy_detection_work, smblib_legacy_detection_work);
 	INIT_DELAYED_WORK(&chg->uusb_otg_work, smblib_uusb_otg_work);
 	INIT_DELAYED_WORK(&chg->bb_removal_work, smblib_bb_removal_work);
+
+	/* Razer charge limiting system */
+	INIT_WORK(&chg->razer_charge_limit_update_work, razer_charge_limit_update_work);
+	mutex_init(&chg->razer_charge_limit_lock);
+	chg->razer_charge_limit_enable = false;
+	chg->razer_charge_limit_active = false;
+	chg->razer_charge_limit_max = RAZER_CHARGE_LIMIT_MAX_DEFAULT;
+	chg->razer_charge_limit_dropdown = RAZER_CHARGE_LIMIT_DROPDOWN_DEFAULT;
+
 	chg->fake_capacity = -EINVAL;
 	chg->fake_input_current_limited = -EINVAL;
 

@@ -289,6 +289,10 @@ struct fg_batt_props {
 	int		float_volt_uv;
 	int		vbatt_full_mv;
 	int		fastchg_curr_ma;
+	/* WayneWCShiue - 9801-8555 - [BAT] Inform Battery Protect AP once the battery can only charge to 4.1V */
+	bool		 fih_jeita_full_capacity_warm_en;
+	bool		 fih_jeita_full_capacity_cool_en;
+	/* end 9801-8555 */
 };
 
 struct fg_cyc_ctr_data {
