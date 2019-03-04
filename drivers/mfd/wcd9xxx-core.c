@@ -1219,6 +1219,9 @@ static int wcd9xxx_slim_probe(struct slim_device *slim)
 	struct wcd9xxx_pdata *pdata;
 	const struct slim_device_id *device_id;
 	int ret = 0;
+#ifdef CONFIG_FIH_9801
+	int retry = 0;
+#endif
 	int intf_type;
 
 	intf_type = wcd9xxx_get_intf_type();
@@ -1351,6 +1354,55 @@ static int wcd9xxx_slim_probe(struct slim_device *slim)
 		goto err_supplies;
 	}
 
+#ifdef CONFIG_FIH_9801
+	/*MM-JohnHCChiang-Retry codec initial-00+{ */
+	for( retry=0 ; retry<5 ; retry++)
+	{
+		ret = wcd9xxx_slim_get_laddr(wcd9xxx->slim, wcd9xxx->slim->e_addr,
+				     ARRAY_SIZE(wcd9xxx->slim->e_addr),
+				     &wcd9xxx->slim->laddr);
+
+		if (ret) {
+			if(retry<5 && strcmp("tasha-slim-pgd",slim_get_device_id(slim)->name)==0) {
+				dev_err(&slim->dev, "%s: start retry! %d \n",__func__ , retry );
+				wcd9xxx_set_reset_pin_state(wcd9xxx, pdata, false);
+				usleep_range(20, 40);
+				ret = msm_cdc_disable_static_supplies(wcd9xxx->dev,
+					     wcd9xxx->supplies,
+					     pdata->regulator,
+					     pdata->num_supplies);
+				if (ret) {
+					dev_err(wcd9xxx->dev, "%s: wcd static supply disable failed!\n",
+						__func__);
+				}
+				ssleep(1);
+				ret = msm_cdc_enable_static_supplies(wcd9xxx->dev,
+					     wcd9xxx->supplies,
+					     pdata->regulator,
+					     pdata->num_supplies);
+				if (ret) {
+					dev_err(wcd9xxx->dev, "%s: wcd static supply enable failed!\n",
+						__func__);
+				}
+				usleep_range(600, 650);
+				wcd9xxx_set_reset_pin_state(wcd9xxx, pdata, false);
+				msleep(20);
+				wcd9xxx_set_reset_pin_state(wcd9xxx, pdata, true);
+				msleep(20);
+				dev_err(&slim->dev, "%s: end retry! %d \n",__func__ , retry );
+			}
+			else{
+				dev_err(&slim->dev, "%s: failed to get slimbus %s logical address: %d\n",
+				__func__, wcd9xxx->slim->name, ret);
+				goto err_reset;
+			}
+		}
+		else{
+			break;
+		}
+	}
+	/*MM-JohnHCChiang-Retry codec initial-00+} */
+#else
 	ret = wcd9xxx_slim_get_laddr(wcd9xxx->slim, wcd9xxx->slim->e_addr,
 				     ARRAY_SIZE(wcd9xxx->slim->e_addr),
 				     &wcd9xxx->slim->laddr);
@@ -1359,6 +1411,7 @@ static int wcd9xxx_slim_probe(struct slim_device *slim)
 		       __func__, wcd9xxx->slim->name, ret);
 		goto err_reset;
 	}
+#endif
 	wcd9xxx->read_dev = wcd9xxx_slim_read_device;
 	wcd9xxx->write_dev = wcd9xxx_slim_write_device;
 	wcd9xxx_pgd_la = wcd9xxx->slim->laddr;
