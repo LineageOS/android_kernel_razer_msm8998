@@ -36,6 +36,14 @@ KBUILD_CFLAGS	+= $(call cc-option, -mpc-relative-literal-loads)
 KBUILD_CFLAGS	+= -fno-asynchronous-unwind-tables
 KBUILD_AFLAGS	+= $(lseinstr)
 
+# alex.naidis@paranoidandroid.co Add msm8998 tuning - start
+ifeq ($(CONFIG_ARCH_MSM8998), y)
+cpu_tune :=	-mcpu=cortex-a53
+KBUILD_CFLAGS	+= $(cpu_tune)
+KBUILD_AFLAGS	+= $(cpu_tune)
+endif
+# alex.naidis@paranoidandroid.co Add msm8998 tuning - end
+
 ifeq ($(CONFIG_CPU_BIG_ENDIAN), y)
 KBUILD_CPPFLAGS	+= -mbig-endian
 AS		+= -EB
