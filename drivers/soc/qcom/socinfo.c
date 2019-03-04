@@ -34,6 +34,9 @@
 #include <soc/qcom/socinfo.h>
 #include <soc/qcom/smem.h>
 #include <soc/qcom/boot_stats.h>
+#ifdef CONFIG_FIH_9801
+#include <fih/hwid.h>
+#endif
 
 #define BUILD_ID_LENGTH 32
 #define SMEM_IMAGE_VERSION_BLOCKS_COUNT 32
@@ -1601,6 +1604,11 @@ int __init socinfo_init(void)
 	socinfo_print();
 	arch_read_hardware_id = msm_read_hardware_id;
 	socinfo_init_done = true;
+
+#ifdef CONFIG_FIH_9801
+	/* FIH, initial hwid mechanism */
+	fih_hwid_setup();
+#endif
 
 	return 0;
 }
