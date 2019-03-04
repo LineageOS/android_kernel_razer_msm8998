@@ -206,6 +206,9 @@ struct smb_params {
 	struct smb_chg_param	dc_icl_div2_mid_hv;
 	struct smb_chg_param	dc_icl_div2_hv;
 	struct smb_chg_param	jeita_cc_comp;
+#ifdef CONFIG_MACH_RCL
+	struct smb_chg_param	jeita_fv_comp;
+#endif
 	struct smb_chg_param	freq_buck;
 	struct smb_chg_param	freq_boost;
 };
