@@ -5542,6 +5542,26 @@ static struct snd_soc_dai_link msm_tasha_fe_dai_links[] = {
 		.codec_dai_name = "tasha_cpe",
 		.codec_name = "tasha_codec",
 	},
+#ifdef CONFIG_MACH_RCL
+	/* Quaternary MI2S RX DAI Link */
+	{
+		.name = "QUAT_MI2S_RX Hostless",
+		.stream_name = "QUAT_MI2S_RX Hostless",
+		.cpu_dai_name = "QUAT_MI2S_RX_HOSTLESS",
+		.platform_name = "msm-pcm-hostless",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+
+	},
+#endif
 };
 
 static struct snd_soc_dai_link msm_tavil_fe_dai_links[] = {
@@ -6502,8 +6522,13 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Quaternary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
 		.platform_name = "msm-pcm-routing",
+#ifdef CONFIG_MACH_RCL
+		.codec_name = "tfa98xx.9-0034",
+		.codec_dai_name = "tfa98xx-aif-9-34",
+#else
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-rx",
+#endif
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
@@ -6517,8 +6542,13 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Quaternary MI2S Capture",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
 		.platform_name = "msm-pcm-routing",
+#ifdef CONFIG_MACH_RCL
+		.codec_name = "tfa98xx.9-0034",
+		.codec_dai_name = "tfa98xx-aif-9-34",
+#else
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-tx",
+#endif
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_TX,
@@ -6526,6 +6556,23 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.ops = &msm_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
+#ifdef CONFIG_MACH_RCL
+	{
+		.name = LPASS_BE_DUMMY_MI2S_RX,
+		.stream_name = "Dummy MI2S Playback",
+		.cpu_dai_name = "msm-dai-q6-mi2s.0",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "tfa98xx.9-0035",
+		.codec_dai_name = "tfa98xx-aif-9-35",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_DUMMY_MI2S_RX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ops = &msm_mi2s_be_ops,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+	},
+#endif
 };
 
 static struct snd_soc_dai_link msm_auxpcm_be_dai_links[] = {
