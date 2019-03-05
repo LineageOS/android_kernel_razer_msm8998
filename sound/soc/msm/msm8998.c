@@ -178,6 +178,12 @@ struct msm_asoc_mach_data {
 	u32 mclk_freq;
 	int us_euro_gpio; /* used by gpio driver API */
 	struct device_node *us_euro_gpio_p; /* used by pinctrl API */
+#ifdef CONFIG_MACH_RCL
+	int ear_switch_en_gpio;
+	int ear_switch_in_gpio;
+	struct device_node *ear_switch_en_gpio_p;
+	struct device_node *ear_switch_in_gpio_p;
+#endif
 	struct device_node *hph_en1_gpio_p; /* used by pinctrl API */
 	struct device_node *hph_en0_gpio_p; /* used by pinctrl API */
 	struct snd_info_entry *codec_root;
@@ -507,6 +513,12 @@ static unsigned int tdm_tx_slot_offset
 		{0xFFFF}, /* not used */
 	}
 };
+
+#ifdef CONFIG_MACH_RCL
+static int ext_ear_switch_en_gpio = -1;
+static int ext_ear_switch_in_gpio = -1;
+#endif
+
 static int msm_vi_feed_tx_ch = 2;
 static const char *const slim_rx_ch_text[] = {"One", "Two", "Three", "Four",
 						"Five", "Six", "Seven",
@@ -3665,6 +3677,54 @@ static int msm_hifi_ctrl_event(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+#ifdef CONFIG_MACH_RCL
+static int msm_ext_ear_switch_in_enable(struct snd_soc_codec *codec, u32 on)
+{
+	struct snd_soc_card *card = codec->component.card;
+	struct msm_asoc_mach_data *pdata =
+				snd_soc_card_get_drvdata(card);
+
+	if (pdata->ear_switch_in_gpio_p) {
+		if (on)
+			msm_cdc_pinctrl_select_active_state(
+							pdata->ear_switch_in_gpio_p);
+		else
+			msm_cdc_pinctrl_select_sleep_state(
+							pdata->ear_switch_in_gpio_p);
+	} else if (pdata->ear_switch_in_gpio_p >= 0) {
+		if (on)
+			gpio_direction_output(ext_ear_switch_in_gpio, 1);
+		else
+			gpio_direction_output(ext_ear_switch_in_gpio, 0);
+	} else {
+		pr_err("%s: external EAR swtich input pin isn't configured\n",
+				__func__);
+		return -EINVAL;
+	}
+	pr_err("%s: external EAR swtich input pin: %s\n", __func__,
+				on ? "Enable" : "Disable");
+	return 0;
+}
+
+static int msm_ext_ear_switch_event(struct snd_soc_dapm_widget *w,
+					struct snd_kcontrol *k, int event)
+{
+	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
+
+	if (!strcmp(w->name, "EAR Switch")) {
+		if (SND_SOC_DAPM_EVENT_ON(event))
+			msm_ext_ear_switch_in_enable(codec, 1);
+		else
+			msm_ext_ear_switch_in_enable(codec, 0);
+	} else {
+		pr_err("%s: Invalid Widget = %s\n",
+				__func__, w->name);
+		return -EINVAL;
+	}
+	return 0;
+}
+#endif
+
 static const struct snd_soc_dapm_widget msm_dapm_widgets[] = {
 
 	SND_SOC_DAPM_SUPPLY("MCLK",  SND_SOC_NOPM, 0, 0,
@@ -3692,6 +3752,9 @@ static const struct snd_soc_dapm_widget msm_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Digital Mic3", NULL),
 	SND_SOC_DAPM_MIC("Digital Mic4", NULL),
 	SND_SOC_DAPM_MIC("Digital Mic5", NULL),
+#ifdef CONFIG_MACH_RCL
+	SND_SOC_DAPM_SPK("EAR Switch", msm_ext_ear_switch_event),
+#endif
 };
 
 static inline int param_is_mask(int p)
@@ -4368,6 +4431,9 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "VIINPUT");
 	snd_soc_dapm_ignore_suspend(dapm, "ANC HPHL");
 	snd_soc_dapm_ignore_suspend(dapm, "ANC HPHR");
+#ifdef CONFIG_MACH_RCL
+	snd_soc_dapm_ignore_suspend(dapm, "EAR Switch");
+#endif
 
 	if (!strcmp(dev_name(codec_dai->dev), "tasha_codec")) {
 		snd_soc_dapm_ignore_suspend(dapm, "LINEOUT3");
@@ -7088,6 +7154,26 @@ static struct snd_soc_dai_link msm_tasha_fe_dai_links[] = {
 		.codec_dai_name = "tasha_cpe",
 		.codec_name = "tasha_codec",
 	},
+#ifdef CONFIG_MACH_RCL
+	/* Quaternary MI2S RX DAI Link */
+	{
+		.name = "QUAT_MI2S_RX Hostless",
+		.stream_name = "QUAT_MI2S_RX Hostless",
+		.cpu_dai_name = "QUAT_MI2S_RX_HOSTLESS",
+		.platform_name = "msm-pcm-hostless",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+
+	},
+#endif
 };
 
 static struct snd_soc_dai_link msm_tavil_fe_dai_links[] = {
@@ -8048,8 +8134,13 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Quaternary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
 		.platform_name = "msm-pcm-routing",
+#ifdef CONFIG_MACH_RCL
+		.codec_name = "tfa98xx.9-0034",
+		.codec_dai_name = "tfa98xx-aif-9-34",
+#else
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-rx",
+#endif
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
@@ -8063,8 +8154,13 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Quaternary MI2S Capture",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
 		.platform_name = "msm-pcm-routing",
+#ifdef CONFIG_MACH_RCL
+		.codec_name = "tfa98xx.9-0034",
+		.codec_dai_name = "tfa98xx-aif-9-34",
+#else
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-tx",
+#endif
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_TX,
@@ -8072,6 +8168,23 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.ops = &msm_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
+#ifdef CONFIG_MACH_RCL
+	{
+		.name = LPASS_BE_DUMMY_MI2S_RX,
+		.stream_name = "Dummy MI2S Playback",
+		.cpu_dai_name = "msm-dai-q6-mi2s.0",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "tfa98xx.9-0035",
+		.codec_dai_name = "tfa98xx-aif-9-35",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_DUMMY_MI2S_RX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ops = &msm_mi2s_be_ops,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+	},
+#endif
 };
 
 static struct snd_soc_dai_link msm_auxpcm_be_dai_links[] = {
@@ -8392,6 +8505,50 @@ static int msm_populate_dai_link_component_of_node(
 err:
 	return ret;
 }
+
+#ifdef CONFIG_MACH_RCL
+static int msm_prepare_ear_switch(struct snd_soc_card *card)
+{
+	struct msm_asoc_mach_data *pdata =
+				snd_soc_card_get_drvdata(card);
+	int ret = 0;
+
+	if (pdata->ear_switch_en_gpio >= 0) {
+		dev_dbg(card->dev, "%s: ear_switch_en_gpio request %d", __func__,
+			pdata->ear_switch_en_gpio);
+		ret = gpio_request(pdata->ear_switch_en_gpio, "ext_ear_switch_en_gpio");
+		if (ret) {
+			dev_err(card->dev,
+				"%s: Failed to request external EAR switch enable gpio %d error %d\n",
+				__func__, pdata->ear_switch_en_gpio, ret);
+		}
+	}
+
+	if (pdata->ear_switch_in_gpio >= 0) {
+		dev_dbg(card->dev, "%s: ear_switch_in_gpio request %d", __func__,
+			pdata->ear_switch_in_gpio);
+		ret = gpio_request(pdata->ear_switch_in_gpio, "ext_ear_switch_in_gpio");
+		if (ret) {
+			dev_err(card->dev,
+				"%s: Failed to request external EAR switch input gpio %d error %d\n",
+				__func__, pdata->ear_switch_in_gpio, ret);
+		}
+	}
+
+	if (pdata->ear_switch_en_gpio_p)
+		msm_cdc_pinctrl_select_active_state(pdata->ear_switch_en_gpio_p);
+	else if (pdata->ear_switch_en_gpio_p >= 0)
+		gpio_direction_output(ext_ear_switch_en_gpio, 1);
+	else {
+		pr_err("%s: external EAR swtich enable pin isn't configured\n",
+				__func__);
+		return -EINVAL;
+	}
+	pr_err("%s: external EAR swtich enable pin: Enable\n", __func__);
+
+	return ret;
+}
+#endif
 
 static int msm_prepare_us_euro(struct snd_soc_card *card)
 {
@@ -9181,8 +9338,53 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		pr_err("%s: Audio notifier register failed ret = %d\n",
 			__func__, ret);
 
+#ifdef CONFIG_MACH_RCL
+	/* EAR Switch */
+	pdata->ear_switch_en_gpio = of_get_named_gpio(pdev->dev.of_node,
+				"fih,ear-switch-en-gpio", 0);
+	if (!gpio_is_valid(pdata->ear_switch_en_gpio))
+		pdata->ear_switch_en_gpio_p = of_parse_phandle(pdev->dev.of_node,
+					"fih,ear-switch-en-gpio", 0);
+	if (!gpio_is_valid(pdata->ear_switch_en_gpio) && (!pdata->ear_switch_en_gpio_p)) {
+		pr_err("property %s not detected in node %s",
+			"fih,ear-switch-en-gpio", pdev->dev.of_node->full_name);
+	} else {
+		pr_err("%s detected",
+			"fih,ear-switch-en-gpio");
+	}
+	pdata->ear_switch_in_gpio = of_get_named_gpio(pdev->dev.of_node,
+				"fih,ear-switch-in-gpio", 0);
+	if (!gpio_is_valid(pdata->ear_switch_in_gpio))
+		pdata->ear_switch_in_gpio_p = of_parse_phandle(pdev->dev.of_node,
+					"fih,ear-switch-in-gpio", 0);
+	if (!gpio_is_valid(pdata->ear_switch_in_gpio) && (!pdata->ear_switch_in_gpio_p)) {
+		pr_err("property %s not detected in node %s",
+			"fih,ear-switch-in-gpio", pdev->dev.of_node->full_name);
+	} else {
+		pr_err("%s detected",
+			"fih,ear-switch-in-gpio");
+	}
+	ret = msm_prepare_ear_switch(card);
+	if (ret)
+		pr_err("msm_prepare_ear_switch failed (%d)\n",
+			ret);
+#endif
 	return 0;
 err:
+#ifdef CONFIG_MACH_RCL
+	if (pdata->ear_switch_en_gpio > 0) {
+		dev_dbg(&pdev->dev, "%s free ear_switch_en gpio %d\n",
+			__func__, pdata->ear_switch_en_gpio);
+		gpio_free(pdata->ear_switch_en_gpio);
+		pdata->ear_switch_en_gpio = 0;
+	}
+	if (pdata->ear_switch_in_gpio > 0) {
+		dev_dbg(&pdev->dev, "%s free ear_switch_in gpio %d\n",
+			__func__, pdata->ear_switch_in_gpio);
+		gpio_free(pdata->ear_switch_in_gpio);
+		pdata->ear_switch_in_gpio = 0;
+	}
+#endif
 	if (pdata->us_euro_gpio > 0) {
 		dev_dbg(&pdev->dev, "%s free us_euro gpio %d\n",
 			__func__, pdata->us_euro_gpio);
@@ -9199,6 +9401,11 @@ static int msm_asoc_machine_remove(struct platform_device *pdev)
 	struct snd_soc_card *card = platform_get_drvdata(pdev);
 	struct msm_asoc_mach_data *pdata =
 				snd_soc_card_get_drvdata(card);
+
+#ifdef CONFIG_MACH_RCL
+	gpio_free(pdata->ear_switch_in_gpio);
+	gpio_free(pdata->ear_switch_en_gpio);
+#endif
 
 	gpio_free(pdata->us_euro_gpio);
 	i2s_auxpcm_deinit();

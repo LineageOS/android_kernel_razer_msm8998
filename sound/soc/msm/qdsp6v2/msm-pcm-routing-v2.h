@@ -195,6 +195,10 @@
 #define LPASS_BE_QUAT_MI2S_TX_3 "QUAT_MI2S_TX_3"
 #define LPASS_BE_QUAT_MI2S_TX_4 "QUAT_MI2S_TX_4"
 
+#ifdef CONFIG_MACH_RCL
+#define LPASS_BE_DUMMY_MI2S_RX "DUMMY_MI2S_RX"
+#endif
+
 /* For multimedia front-ends, asm session is allocated dynamically.
  * Hence, asm session/multimedia front-end mapping has to be maintained.
  * Due to this reason, additional multimedia front-end must be placed before
@@ -425,6 +429,9 @@ enum {
 	MSM_BACKEND_DAI_QUATERNARY_MI2S_TX_2,
 	MSM_BACKEND_DAI_QUATERNARY_MI2S_TX_3,
 	MSM_BACKEND_DAI_QUATERNARY_MI2S_TX_4,
+#ifdef CONFIG_MACH_RCL
+	MSM_BACKEND_DAI_DUMMY_MI2S_RX,
+#endif
 	MSM_BACKEND_DAI_MAX,
 };
 
