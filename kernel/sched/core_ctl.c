@@ -1,4 +1,6 @@
 /* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2017 Razer Inc.
+ * Copyright (C) 2017 Paranoid Android.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,6 +24,7 @@
 #include <linux/sched/rt.h>
 
 #include <trace/events/sched.h>
+#include "sched.h"
 
 #define MAX_CPUS_PER_CLUSTER 4
 #define MAX_CLUSTERS 2
@@ -67,10 +70,10 @@ struct cpu_data {
 
 static DEFINE_PER_CPU(struct cpu_data, cpu_state);
 static struct cluster_data cluster_state[MAX_CLUSTERS];
-static unsigned int num_clusters;
+static unsigned int num_clusters_c;
 
 #define for_each_cluster(cluster, idx) \
-	for ((cluster) = &cluster_state[idx]; (idx) < num_clusters;\
+	for ((cluster) = &cluster_state[idx]; (idx) < num_clusters_c;\
 		(idx)++, (cluster) = &cluster_state[idx])
 
 static DEFINE_SPINLOCK(state_lock);
@@ -575,7 +578,8 @@ static bool eval_need(struct cluster_data *cluster)
 		cluster->active_cpus = get_active_cpu_count(cluster);
 		thres_idx = cluster->active_cpus ? cluster->active_cpus - 1 : 0;
 		list_for_each_entry(c, &cluster->lru, sib) {
-			if (c->busy >= cluster->busy_up_thres[thres_idx])
+			if (c->busy >= cluster->busy_up_thres[thres_idx] ||
+			    sched_cpu_high_irqload(c->cpu))
 				c->is_busy = true;
 			else if (c->busy < cluster->busy_down_thres[thres_idx])
 				c->is_busy = false;
@@ -727,13 +731,20 @@ void core_ctl_check(u64 wallclock)
 	}
 }
 
+// alex.naidis@paranoidandroid.co Detect and correct IRQ stacking scenario - start
+static void move_cpu_lru_no_lock(struct cpu_data *cpu_data)
+{
+	list_del(&cpu_data->sib);
+	list_add_tail(&cpu_data->sib, &cpu_data->cluster->lru);
+}
+// alex.naidis@paranoidandroid.co Detect and correct IRQ stacking scenario - end
+
 static void move_cpu_lru(struct cpu_data *cpu_data)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&state_lock, flags);
-	list_del(&cpu_data->sib);
-	list_add_tail(&cpu_data->sib, &cpu_data->cluster->lru);
+	move_cpu_lru_no_lock(cpu_data);
 	spin_unlock_irqrestore(&state_lock, flags);
 }
 
@@ -744,11 +755,23 @@ static void try_to_isolate(struct cluster_data *cluster, unsigned int need)
 	unsigned int num_cpus = cluster->num_cpus;
 	unsigned int nr_isolated = 0;
 
+	// alex.naidis@paranoidandroid.co Detect and correct IRQ stacking scenario - start
+	/* Reorder LRU list as per our requirement */
+	spin_lock_irqsave(&state_lock, flags);
+	list_for_each_entry_safe(c, tmp, &cluster->lru, sib) {
+		/* Detect correct cpu */
+		if (c->cpu == cluster->first_cpu) {
+			/* Once detected, move the entry to the tail */
+			move_cpu_lru_no_lock(c);
+			break;
+		}
+	}
+	// alex.naidis@paranoidandroid.co Detect and correct IRQ stacking scenario - end
+
 	/*
 	 * Protect against entry being removed (and added at tail) by other
 	 * thread (hotplug).
 	 */
-	spin_lock_irqsave(&state_lock, flags);
 	list_for_each_entry_safe(c, tmp, &cluster->lru, sib) {
 		if (!num_cpus--)
 			break;
@@ -822,11 +845,28 @@ static void __try_to_unisolate(struct cluster_data *cluster,
 	unsigned int num_cpus = cluster->num_cpus;
 	unsigned int nr_unisolated = 0;
 
+	// alex.naidis@paranoidandroid.co Detect and correct IRQ stacking scenario - start
+	/* Reorder LRU list as per our requirement */
+	spin_lock_irqsave(&state_lock, flags);
+	list_for_each_entry_safe(c, tmp, &cluster->lru, sib) {
+		if (!num_cpus--)
+			break;
+
+		/* Detect correct cpu */
+		if (c->cpu == cluster->first_cpu) {
+			/* Do not move first_cpu to tail */
+			continue;
+		}
+		move_cpu_lru_no_lock(c);
+	}
+
+	num_cpus = cluster->num_cpus;
+	// alex.naidis@paranoidandroid.co Detect and correct IRQ stacking scenario - end
+
 	/*
 	 * Protect against entry being removed (and added at tail) by other
 	 * thread (hotplug).
 	 */
-	spin_lock_irqsave(&state_lock, flags);
 	list_for_each_entry_safe(c, tmp, &cluster->lru, sib) {
 		if (!num_cpus--)
 			break;
@@ -1016,7 +1056,7 @@ static struct cluster_data *find_cluster_by_first_cpu(unsigned int first_cpu)
 {
 	unsigned int i;
 
-	for (i = 0; i < num_clusters; ++i) {
+	for (i = 0; i < num_clusters_c; ++i) {
 		if (cluster_state[i].first_cpu == first_cpu)
 			return &cluster_state[i];
 	}
@@ -1045,13 +1085,13 @@ static int cluster_init(const struct cpumask *mask)
 
 	pr_info("Creating CPU group %d\n", first_cpu);
 
-	if (num_clusters == MAX_CLUSTERS) {
+	if (num_clusters_c == MAX_CLUSTERS) {
 		pr_err("Unsupported number of clusters. Only %u supported\n",
 								MAX_CLUSTERS);
 		return -EINVAL;
 	}
-	cluster = &cluster_state[num_clusters];
-	++num_clusters;
+	cluster = &cluster_state[num_clusters_c];
+	++num_clusters_c;
 
 	cpumask_copy(&cluster->cpu_mask, mask);
 	cluster->num_cpus = cpumask_weight(mask);
