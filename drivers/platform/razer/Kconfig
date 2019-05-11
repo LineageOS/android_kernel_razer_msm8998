@@ -1,0 +1,24 @@
+# Razer configuration options
+
+config MACH_RAZER
+	bool "Razer board"
+	depends on ARCH_QCOM
+	help
+	 Support for Razer boards.
+
+config MACH_RAZER_MSM8998
+	bool "Razer MSM8998 boards"
+	depends on ARCH_MSM8998
+	select MACH_RAZER
+	help
+	 Support for MSM8998 Razer boards.
+
+menu "Razer board selection"
+
+config MACH_CHERYL
+	bool "cheryl board"
+	select MACH_RAZER_MSM8998
+	help
+	 Support for Razer Phone, codenamed cheryl.
+
+endmenu
