@@ -1,0 +1,24 @@
+# FIH configuration options
+
+config MACH_FIH
+	bool "FIH board"
+	depends on ARCH_QCOM
+	help
+	 Support for FIH boards.
+
+config MACH_FIH_MSM8998
+	bool "FIH MSM8998 boards"
+	depends on ARCH_MSM8998
+	select MACH_FIH
+	help
+	 Support for FIH MSM8998 boards.
+
+menu "FIH board selection"
+
+config MACH_RCL
+	bool "rcl board"
+	select MACH_FIH_MSM8998
+	help
+	 Support for Razer Phone, codenamed rcl.
+
+endmenu
