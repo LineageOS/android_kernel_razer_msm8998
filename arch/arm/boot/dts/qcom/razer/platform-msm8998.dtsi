@@ -26,6 +26,9 @@
 	firmware: firmware {
 		android {
 			fstab {
+				vendor {
+					fsmgr_flags = "wait,slotselect";
+				};
 				persist {
 					compatible = "android,persist";
 					dev = "/dev/block/platform/soc/1da4000.ufshc/by-name/persist";
