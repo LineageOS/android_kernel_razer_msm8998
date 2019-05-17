@@ -22,6 +22,16 @@
 		spi1 = &spi_1;
 		spi12 = &spi_12;
 	};
+
+	firmware: firmware {
+		android {
+			fstab {
+				vendor {
+					fsmgr_flags = "wait,slotselect";
+				};
+			};
+		};
+	};
 };
 
 &uartblsp2dm1 {
