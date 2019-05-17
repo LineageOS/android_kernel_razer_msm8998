@@ -10,6 +10,18 @@
  * GNU General Public License for more details.
  */
 
+/ {
+	firmware: firmware {
+		android {
+			fstab {
+				vendor {
+					fsmgr_flags = "wait,slotselect";
+				};
+			};
+		};
+	};
+};
+
 &soc {
 	tlmm: pinctrl@03400000 {
 		blsp1_uart3: blsp1_uart3 {
