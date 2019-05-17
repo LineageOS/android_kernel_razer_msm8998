@@ -40,6 +40,11 @@
 			};
 		};
 	};
+
+	keyreset {
+		compatible = "android,keyreset";
+		keys-down = <0x73 0x72>;
+	};
 };
 
 &uartblsp2dm1 {
