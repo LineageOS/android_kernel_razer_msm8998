@@ -244,7 +244,11 @@ static int get_val(struct range_data *range, int hysteresis, int current_index,
 			*val = range[current_index].value;
 		}
 	} else if (*new_index == current_index - 1) {
+#ifdef CONFIG_MACH_RCL
+		if (threshold > range[*new_index].high_threshold - hysteresis + 1) {
+#else
 		if (threshold > range[*new_index].high_threshold - hysteresis) {
+#endif
 			/*
 			 * stay in the current index, threshold is not lower
 			 * by hysteresis amount
