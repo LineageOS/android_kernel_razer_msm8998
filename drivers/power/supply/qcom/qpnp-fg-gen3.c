@@ -4529,6 +4529,8 @@ static irqreturn_t fg_delta_batt_temp_irq_handler(int irq, void *data)
 #ifdef CONFIG_MACH_RCL
 	rc = power_supply_set_property(chip->batt_psy,
 			POWER_SUPPLY_PROP_FIH_PERIOD_CHECKER, &prop);
+
+	power_supply_changed(chip->batt_psy);
 #endif
 
 	return IRQ_HANDLED;
