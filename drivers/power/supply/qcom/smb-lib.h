@@ -68,6 +68,9 @@ enum print_reason {
 #define WBC_VOTER			"WBC_VOTER"
 #define OV_VOTER			"OV_VOTER"
 #define FCC_STEPPER_VOTER		"FCC_STEPPER_VOTER"
+#ifdef CONFIG_MACH_RCL
+#define RAZER_LIMIT_VOTER		"RAZER_LIMIT_VOTER"
+#endif
 
 #define VCONN_MAX_ATTEMPTS	3
 #define OTG_MAX_ATTEMPTS	3
@@ -377,6 +380,14 @@ struct smb_charger {
 
 #ifdef CONFIG_MACH_RCL
 	int			fih_jeita_full_capacity_warm_en;
+
+	/* Razer charge limiting system */
+	bool			razer_charge_limit_enable;
+	bool			razer_charge_limit_active;
+	int			razer_charge_limit_max;
+	int			razer_charge_limit_dropdown;
+	struct mutex		razer_charge_limit_lock;
+	struct work_struct	razer_charge_limit_update_work;
 #endif
 };
 
@@ -550,4 +561,9 @@ void smblib_usb_typec_change(struct smb_charger *chg);
 
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);
+
+#ifdef CONFIG_MACH_RCL
+void razer_charge_limit_update(struct smb_charger *chg);
+#endif
+
 #endif /* __SMB2_CHARGER_H */
