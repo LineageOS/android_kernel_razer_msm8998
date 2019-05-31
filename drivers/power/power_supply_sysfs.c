@@ -289,6 +289,8 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(pe_start),
 	POWER_SUPPLY_ATTR(set_ship_mode),
 #ifdef CONFIG_MACH_RCL
+	POWER_SUPPLY_ATTR(jeita_full_capacity_status),
+	POWER_SUPPLY_ATTR(jeita_full_capacity_warm_en),
 	POWER_SUPPLY_ATTR(fih_period_checker),
 #endif
 	POWER_SUPPLY_ATTR(soc_reporting_ready),
