@@ -2963,6 +2963,7 @@ int smblib_set_prop_pd_in_hard_reset(struct smb_charger *chg,
 	return rc;
 }
 
+#ifndef CONFIG_MACH_RCL
 static int smblib_recover_from_soft_jeita(struct smb_charger *chg)
 {
 	u8 stat_1, stat_2;
@@ -3007,6 +3008,7 @@ static int smblib_recover_from_soft_jeita(struct smb_charger *chg)
 
 	return 0;
 }
+#endif
 
 /***********************
 * USB MAIN PSY GETTERS *
@@ -3199,6 +3201,7 @@ irqreturn_t smblib_handle_batt_temp_changed(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
+#ifndef CONFIG_MACH_RCL
 	int rc;
 
 	rc = smblib_recover_from_soft_jeita(chg);
@@ -3207,6 +3210,7 @@ irqreturn_t smblib_handle_batt_temp_changed(int irq, void *data)
 				rc);
 		return IRQ_HANDLED;
 	}
+#endif
 
 	rerun_election(chg->fcc_votable);
 	power_supply_changed(chg->batt_psy);
