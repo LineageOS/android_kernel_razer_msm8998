@@ -2710,9 +2710,46 @@ int smblib_set_prop_sdp_current_max(struct smb_charger *chg,
 				    const union power_supply_propval *val)
 {
 	int rc = 0;
+#ifdef CONFIG_MACH_RCL
+	int typec_mode = 0;
+	bool legacy_cable = 0;
+	union power_supply_propval final_val = {0, };
+#endif
 
 	if (!chg->pd_active) {
 		rc = smblib_handle_usb_current(chg, val->intval);
+#ifdef CONFIG_MACH_RCL
+		final_val.intval = val->intval;
+		typec_mode = smblib_get_prop_ufp_mode(chg);
+		legacy_cable = (bool)(chg->typec_status[4] &
+				TYPEC_LEGACY_CABLE_STATUS_BIT);
+		if (!legacy_cable) {
+			/*
+			 * It's a C to C cable, the charging current
+			 * should be determined by typeC mode
+			 */
+			if (typec_mode ==
+			    POWER_SUPPLY_TYPEC_SOURCE_MEDIUM)
+				final_val.intval = 1500000;
+
+			if (typec_mode ==
+			    POWER_SUPPLY_TYPEC_SOURCE_HIGH)
+				final_val.intval = 3000000;
+		} else {
+			/*
+			 * It's a C to A cable,
+			 * we only allow the ICL to 900 mA
+			 */
+			if (typec_mode ==
+			    POWER_SUPPLY_TYPEC_SOURCE_MEDIUM ||
+			    typec_mode ==
+			    POWER_SUPPLY_TYPEC_SOURCE_HIGH)
+				final_val.intval = 900000;
+		}
+
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
+				true, final_val.intval);
+#endif
 	} else if (chg->system_suspend_supported) {
 		if (val->intval <= USBIN_25MA)
 			rc = vote(chg->usb_icl_votable,
