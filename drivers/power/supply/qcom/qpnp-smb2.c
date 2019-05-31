@@ -355,6 +355,12 @@ static int smb2_parse_dt(struct smb2 *chip)
 		pr_err("fg-fcc-comp unavailable, rc:%d\n", rc);
 		chip->dt.jeita_fv_comp = -EINVAL;
 	}
+
+	chg->fih_chg_abnormal_check_en = of_property_read_bool(node,
+					"fih,chg-abnormal-check-en");
+	if (chg->fih_chg_abnormal_check_en == true) {
+		chg->fih_reEnable_max_limit = 0;
+	}
 #endif
 
 	return 0;
@@ -1181,6 +1187,11 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED:
 		rc = smblib_set_prop_input_current_limited(chg, val);
 		break;
+#ifdef CONFIG_MACH_RCL
+	case POWER_SUPPLY_PROP_FIH_PERIOD_CHECKER:
+		FIH_chg_abnormal_check(chg);
+	break;
+#endif
 	default:
 		rc = -EINVAL;
 	}
