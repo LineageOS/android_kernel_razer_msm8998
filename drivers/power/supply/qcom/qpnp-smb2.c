@@ -982,6 +982,9 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
+#ifdef CONFIG_MACH_RCL
+	POWER_SUPPLY_PROP_JEITA_FULL_CAPACITY_STATUS,
+#endif
 };
 
 static int smb2_batt_get_prop(struct power_supply *psy,
@@ -1093,6 +1096,11 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE:
 		val->intval = chg->fcc_stepper_mode;
 		break;
+#ifdef CONFIG_MACH_RCL
+	case POWER_SUPPLY_PROP_JEITA_FULL_CAPACITY_STATUS:
+		val->intval = FIH_check_chg_status(chg);
+		break;
+#endif
 	default:
 		pr_err("batt power supply prop %d not supported\n", psp);
 		return -EINVAL;
@@ -1188,7 +1196,14 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 		rc = smblib_set_prop_input_current_limited(chg, val);
 		break;
 #ifdef CONFIG_MACH_RCL
+	case POWER_SUPPLY_PROP_JEITA_FULL_CAPACITY_WARM_EN:
+		if (val->intval == 1)
+			chg->fih_jeita_full_capacity_warm_en = true;
+		else
+			chg->fih_jeita_full_capacity_warm_en = false;
+		break;
 	case POWER_SUPPLY_PROP_FIH_PERIOD_CHECKER:
+		FIH_soft_JEITA_recharge_check(chg);
 		FIH_chg_abnormal_check(chg);
 	break;
 #endif

@@ -1040,6 +1040,12 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 		return -EINVAL;
 	}
 
+#ifdef CONFIG_MACH_RCL
+	chip->bp.fih_jeita_full_capacity_warm_en =
+			of_property_read_bool(profile_node,
+				"fih,jeita-full-capacity-warm-en");
+#endif
+
 	chip->profile_available = true;
 	memcpy(chip->batt_profile, data, len);
 
@@ -1155,6 +1161,20 @@ static void fg_notify_charger(struct fg_chip *chip)
 			rc);
 		return;
 	}
+
+#ifdef CONFIG_MACH_RCL
+	if (chip->bp.fih_jeita_full_capacity_warm_en == true)
+		prop.intval = 1;
+	else
+		prop.intval = 0;
+	rc = power_supply_set_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_JEITA_FULL_CAPACITY_WARM_EN,
+			&prop);
+	if (rc < 0) {
+		pr_err("Error in setting fih_jeita_full_cap_warm_en property on batt_psy, rc=%d\n",
+			rc);
+	}
+#endif
 
 	prop.intval = chip->bp.fastchg_curr_ma * 1000;
 	rc = power_supply_set_property(chip->batt_psy,
