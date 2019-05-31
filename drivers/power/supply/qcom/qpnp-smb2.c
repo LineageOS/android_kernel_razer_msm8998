@@ -1620,6 +1620,21 @@ static int smb2_init_hw(struct smb2 *chip)
 	 * AICL configuration:
 	 * start from min and AICL ADC disable
 	 */
+#ifdef CONFIG_MACH_RCL
+	rc = smblib_masked_write(chg, USBIN_AICL_OPTIONS_CFG_REG,
+			USBIN_AICL_START_AT_MAX_BIT | USBIN_AICL_RERUN_EN_BIT
+				| USBIN_AICL_ADC_EN_BIT, USBIN_AICL_RERUN_EN_BIT);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't configure AICL rc=%d\n", rc);
+		return rc;
+	}
+
+	rc = smblib_masked_write(chg, AICL_RERUN_TIME_CFG_REG,
+			AICL_RERUN_TIME_MASK,  0x1);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't configure AICL rerun timer rc=%d\n", rc);
+	}
+#else
 	rc = smblib_masked_write(chg, USBIN_AICL_OPTIONS_CFG_REG,
 			USBIN_AICL_START_AT_MAX_BIT
 				| USBIN_AICL_ADC_EN_BIT, 0);
@@ -1627,6 +1642,7 @@ static int smb2_init_hw(struct smb2 *chip)
 		dev_err(chg->dev, "Couldn't configure AICL rc=%d\n", rc);
 		return rc;
 	}
+#endif
 
 	/* Configure charge enable for software control; active high */
 	rc = smblib_masked_write(chg, CHGR_CFG2_REG,
