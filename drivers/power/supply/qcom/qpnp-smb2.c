@@ -997,6 +997,9 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	struct smb_charger *chg = power_supply_get_drvdata(psy);
 	int rc = 0;
 	union power_supply_propval pval = {0, };
+#ifdef CONFIG_MACH_RCL
+	union power_supply_propval test_capacity = {0, };
+#endif
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
@@ -1004,6 +1007,16 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		rc = smblib_get_prop_batt_status(chg, val);
 		if (rc < 0)
 			break;
+
+		rc = smblib_get_prop_batt_capacity(chg, &test_capacity);
+		if (rc < 0)
+			break;
+
+		if (val->intval == POWER_SUPPLY_STATUS_CHARGING &&
+		    test_capacity.intval == 100) {
+			val->intval = POWER_SUPPLY_STATUS_FULL;
+			break;
+		}
 
 		if (val->intval == POWER_SUPPLY_STATUS_FULL ||
 		    val->intval == POWER_SUPPLY_STATUS_NOT_CHARGING) {
