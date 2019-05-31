@@ -86,6 +86,15 @@ static struct step_chg_info *the_chip;
  * range data must be in increasing ranges and shouldn't overlap
  */
 static struct step_chg_cfg step_chg_config = {
+#ifdef CONFIG_MACH_RCL
+	.psy_prop	= POWER_SUPPLY_PROP_CAPACITY,
+	.prop_name	= "SOC",
+	.fcc_cfg	= {
+		/* SOC_LOW	SOC_HIGH	FCC */
+		{0,		25,		3900000},
+		{26,		100,		1900000},
+	},
+#else
 	.psy_prop	= POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	.prop_name	= "VBATT",
 	.hysteresis	= 100000, /* 100mV */
@@ -107,6 +116,7 @@ static struct step_chg_cfg step_chg_config = {
 	 *		{90,		100,		2500000},
 	 *	},
 	 */
+#endif
 };
 
 /*
@@ -121,6 +131,15 @@ static struct step_chg_cfg step_chg_config = {
 static struct jeita_fcc_cfg jeita_fcc_config = {
 	.psy_prop	= POWER_SUPPLY_PROP_TEMP,
 	.prop_name	= "BATT_TEMP",
+#ifdef CONFIG_MACH_RCL
+	.hysteresis	= 30, /* 3degC hysteresis */
+	.fcc_cfg	= {
+		/* TEMP_LOW	TEMP_HIGH	FCC */
+		{0,		159,		750000},
+		{160,		449,		3900000},
+		{450,		549,		1900000},
+	},
+#else
 	.hysteresis	= 10, /* 1degC hysteresis */
 	.fcc_cfg	= {
 		/* TEMP_LOW	TEMP_HIGH	FCC */
@@ -129,11 +148,21 @@ static struct jeita_fcc_cfg jeita_fcc_config = {
 		{201,		450,		3000000},
 		{451,		550,		600000},
 	},
+#endif
 };
 
 static struct jeita_fv_cfg jeita_fv_config = {
 	.psy_prop	= POWER_SUPPLY_PROP_TEMP,
 	.prop_name	= "BATT_TEMP",
+#ifdef CONFIG_MACH_RCL
+	.hysteresis	= 30, /* 3degC hysteresis */
+	.fv_cfg		= {
+		/* TEMP_LOW	TEMP_HIGH	FV */
+		{0,		149,		4400000},
+		{150,		449,		4400000},
+		{450,		549,		4100000},
+	},
+#else
 	.hysteresis	= 10, /* 1degC hysteresis */
 	.fv_cfg		= {
 		/* TEMP_LOW	TEMP_HIGH	FCC */
@@ -141,6 +170,7 @@ static struct jeita_fv_cfg jeita_fv_config = {
 		{101,		450,		4400000},
 		{451,		550,		4200000},
 	},
+#endif
 };
 
 static bool is_batt_available(struct step_chg_info *chip)
