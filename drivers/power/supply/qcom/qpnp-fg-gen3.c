@@ -2739,8 +2739,13 @@ static void status_change_work(struct work_struct *work)
 		goto out;
 	}
 
+#ifdef CONFIG_MACH_RCL
+	rc = power_supply_get_property(chip->batt_psy, POWER_SUPPLY_PROP_STATUS_INTERNAL,
+			&prop);
+#else
 	rc = power_supply_get_property(chip->batt_psy, POWER_SUPPLY_PROP_STATUS,
 			&prop);
+#endif
 	if (rc < 0) {
 		pr_err("Error in getting charging status, rc=%d\n", rc);
 		goto out;

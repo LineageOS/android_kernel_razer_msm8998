@@ -954,6 +954,9 @@ static int smb2_init_dc_psy(struct smb2 *chip)
 static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_INPUT_SUSPEND,
 	POWER_SUPPLY_PROP_STATUS,
+#ifdef CONFIG_MACH_RCL
+	POWER_SUPPLY_PROP_STATUS_INTERNAL,
+#endif
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
@@ -997,6 +1000,42 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
+#ifdef CONFIG_MACH_RCL
+		rc = smblib_get_prop_batt_status(chg, val);
+		if (rc < 0)
+			break;
+
+		if (val->intval == POWER_SUPPLY_STATUS_FULL ||
+		    val->intval == POWER_SUPPLY_STATUS_NOT_CHARGING) {
+			union power_supply_propval pval_health = {0, };
+			union power_supply_propval pval_temp = {0, };
+			union power_supply_propval pval_usb = {0, };
+			union power_supply_propval pval_dc = {0, };
+			union power_supply_propval pval_capacity = {0, };
+			union power_supply_propval pval_is = {0, };
+
+			rc |= smblib_get_prop_batt_health(chg, &pval_health);
+			rc |= smblib_get_prop_from_bms(chg,
+					POWER_SUPPLY_PROP_TEMP, &pval);
+			rc |= smblib_get_prop_usb_present(chg, &pval_usb);
+			rc |= smblib_get_prop_dc_present(chg, &pval_dc);
+			rc |= smblib_get_prop_batt_capacity(chg, &pval_capacity);
+			rc |= smblib_get_prop_input_suspend(chg, &pval_is);
+
+			if (pval_health.intval == POWER_SUPPLY_HEALTH_WARM &&
+			    pval_is.intval == 0 && pval_capacity.intval < 95 &&
+			    pval_capacity.intval > 60 &&
+			    (pval_usb.intval == 1 || pval_dc.intval == 1)) {
+				pr_info("Change status to charging. TEMP=%d HEALTH=%d IS=%d USB=%d DC=%d CAP=%d\n",
+					pval_temp.intval, pval_health.intval,
+					pval_is.intval, pval_usb.intval,
+					pval_dc.intval, pval_capacity.intval);
+				val->intval = POWER_SUPPLY_STATUS_CHARGING;
+			}
+		}
+		break;
+	case POWER_SUPPLY_PROP_STATUS_INTERNAL:
+#endif
 		rc = smblib_get_prop_batt_status(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
