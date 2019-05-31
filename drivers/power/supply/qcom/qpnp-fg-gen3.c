@@ -4500,6 +4500,12 @@ static irqreturn_t fg_delta_batt_temp_irq_handler(int irq, void *data)
 	if (abs(chip->last_batt_temp - batt_temp) > 30)
 		pr_warn("Battery temperature last:%d current: %d\n",
 			chip->last_batt_temp, batt_temp);
+
+#ifdef CONFIG_MACH_RCL
+	rc = power_supply_set_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_FIH_PERIOD_CHECKER, &prop);
+#endif
+
 	return IRQ_HANDLED;
 }
 
@@ -4538,6 +4544,9 @@ static irqreturn_t fg_delta_msoc_irq_handler(int irq, void *data)
 {
 	struct fg_chip *chip = data;
 	int rc;
+#ifdef CONFIG_MACH_RCL
+	union power_supply_propval prop = {0, };
+#endif
 
 	fg_dbg(chip, FG_IRQ, "irq %d triggered\n", irq);
 	fg_cycle_counter_update(chip);
@@ -4565,6 +4574,10 @@ static irqreturn_t fg_delta_msoc_irq_handler(int irq, void *data)
 	if (rc < 0)
 		pr_err("Error in adjusting timebase, rc=%d\n", rc);
 
+#ifdef CONFIG_MACH_RCL
+	rc = power_supply_set_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_FIH_PERIOD_CHECKER, &prop);
+#endif
 	if (batt_psy_initialized(chip))
 		power_supply_changed(chip->batt_psy);
 
