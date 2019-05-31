@@ -374,6 +374,10 @@ struct smb_charger {
 	/* qnovo */
 	int			usb_icl_delta_ua;
 	int			pulse_cnt;
+
+#ifdef CONFIG_MACH_RCL
+	int			fih_jeita_full_capacity_warm_en;
+#endif
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -475,9 +479,11 @@ int smblib_get_prop_typec_cc_orientation(struct smb_charger *chg,
 				union power_supply_propval *val);
 
 #ifdef CONFIG_MACH_RCL
+int FIH_check_chg_status(struct smb_charger *chg);
 void FIH_chg_abnormal_check(struct smb_charger *chg);
 void FIH_chg_reEnable(struct smb_charger *chg);
 void FIH_USBIN_reEnable(struct smb_charger *chg);
+void FIH_soft_JEITA_recharge_check(struct smb_charger *chg);
 #endif
 
 int smblib_get_prop_typec_power_role(struct smb_charger *chg,

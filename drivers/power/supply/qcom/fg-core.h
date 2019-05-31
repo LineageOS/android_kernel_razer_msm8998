@@ -301,6 +301,9 @@ struct fg_batt_props {
 	int		float_volt_uv;
 	int		vbatt_full_mv;
 	int		fastchg_curr_ma;
+#ifdef CONFIG_MACH_RCL
+	bool		fih_jeita_full_capacity_warm_en;
+#endif
 };
 
 struct fg_cyc_ctr_data {

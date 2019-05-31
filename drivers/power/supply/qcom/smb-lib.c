@@ -2479,6 +2479,98 @@ void FIH_chg_abnormal_check(struct smb_charger *chg)
 		FIH_USBIN_reEnable(chg);
 	}
 }
+
+/*
+ * 1. Charger is online
+ * 2. Charging status is FULL or DISCHARGING
+ * 3. Msoc is lower than 94%
+ * 4. JEITA is warm, return JEITA_FULL_CAP_WARM
+ * 5. JEITA is normal, return JEITA_FULL_CAP_RECHARGE
+ */
+#define JEITA_FULL_RECHARGE_SOC 99
+#define JEITA_FULL_CAP_NONE 0
+#define JEITA_FULL_CAP_WARM 1
+#define FULL_CAP_RECHARGE 3
+int FIH_check_chg_status(struct smb_charger *chg)
+{
+	union power_supply_propval prop = {0, };
+	int rc = 0;
+	u8 jeita_status = 0;
+	int charge_status = 0;
+	bool usb_present = false;
+	bool wireless_present = false;
+	bool isCharge = false;
+	int msoc = 0;
+
+	rc = smblib_get_prop_usb_present(chg, &prop);
+	if (rc < 0) {
+		pr_err("Cannot read smblib_get_prop_usb_present in FIH_check_chg_status\n");
+	} else {
+		usb_present = (prop.intval == 1) ? true : false;
+	}
+
+	prop.intval = 0;
+	rc = smblib_get_prop_dc_present(chg, &prop);
+	if (rc < 0) {
+		pr_err("Cannot read smblib_get_prop_dc_present in FIH_check_chg_status\n");
+	} else {
+		wireless_present = (prop.intval == 1) ? true : false;
+	}
+
+	isCharge = usb_present || wireless_present;
+	if (isCharge == false)
+		return JEITA_FULL_CAP_NONE;
+
+	prop.intval = 0;
+	rc = smblib_get_prop_batt_status(chg, &prop);
+	if (rc < 0) {
+		pr_err("Cannot read batt_status in FIH_check_chg_status\n");
+		return JEITA_FULL_CAP_NONE;
+	}
+	charge_status = prop.intval;
+	if (charge_status != POWER_SUPPLY_STATUS_DISCHARGING &&
+	    charge_status != POWER_SUPPLY_STATUS_FULL)
+		return JEITA_FULL_CAP_NONE;
+
+	prop.intval = 0;
+	rc = smblib_get_prop_batt_capacity(chg, &prop);
+	if (rc < 0) {
+		pr_err("Cannot read battery capacity in FIH_check_chg_status\n");
+		return JEITA_FULL_CAP_NONE;
+	}
+	msoc = prop.intval;
+	if (msoc >= JEITA_FULL_RECHARGE_SOC)
+		return JEITA_FULL_CAP_NONE;
+
+	rc = smblib_read(chg, BATTERY_CHARGER_STATUS_2_REG,
+			&jeita_status);
+	if (rc < 0) {
+		pr_err("Cannot read BATTERY_CHARGER_STATUS_2_REG in FIH_check_chg_status\n");
+		return JEITA_FULL_CAP_NONE;
+	}
+
+	if (chg->fih_jeita_full_capacity_warm_en == true &&
+	    (jeita_status & BAT_TEMP_STATUS_HOT_SOFT_LIMIT_BIT)) {
+		pr_debug("JEITA_FULL_CAP_WARM HIT !!\n");
+		return JEITA_FULL_CAP_WARM;
+	}
+
+	if ((jeita_status & BAT_TEMP_STATUS_MASK) == 0x0) {
+		pr_debug("Workaround: try to recharge battery\n");
+		return FULL_CAP_RECHARGE;
+	}
+
+	return JEITA_FULL_CAP_NONE;
+}
+
+void FIH_soft_JEITA_recharge_check(struct smb_charger *chg) {
+	int jeita_full_status = 0;
+
+	jeita_full_status = FIH_check_chg_status(chg);
+	if (jeita_full_status == FULL_CAP_RECHARGE) {
+		FIH_chg_reEnable(chg);
+	}
+}
 #endif
 
 static int smblib_get_prop_typec_mode(struct smb_charger *chg)
