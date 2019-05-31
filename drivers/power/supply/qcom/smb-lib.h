@@ -351,6 +351,10 @@ struct smb_charger {
 	bool			use_extcon;
 	bool			otg_present;
 	bool			fcc_stepper_mode;
+#ifdef CONFIG_MACH_RCL
+	bool			fih_chg_abnormal_check_en;
+	u8			fih_reEnable_max_limit;
+#endif
 
 	/* workaround flag */
 	u32			wa_flags;
@@ -469,6 +473,13 @@ int smblib_get_prop_usb_current_now(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_typec_cc_orientation(struct smb_charger *chg,
 				union power_supply_propval *val);
+
+#ifdef CONFIG_MACH_RCL
+void FIH_chg_abnormal_check(struct smb_charger *chg);
+void FIH_chg_reEnable(struct smb_charger *chg);
+void FIH_USBIN_reEnable(struct smb_charger *chg);
+#endif
+
 int smblib_get_prop_typec_power_role(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_pd_allowed(struct smb_charger *chg,

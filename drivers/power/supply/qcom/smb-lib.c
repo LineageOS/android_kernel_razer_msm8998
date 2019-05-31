@@ -2341,6 +2341,146 @@ static int smblib_get_prop_dfp_mode(struct smb_charger *chg)
 	return POWER_SUPPLY_TYPEC_NONE;
 }
 
+#ifdef CONFIG_MACH_RCL
+#define RETRY_TIMES 3
+void FIH_chg_reEnable(struct smb_charger *chg)
+{
+	int rc = 0;
+	int retry = 0;
+
+	smblib_dbg(chg, PR_MISC, "Entering FIH_chg_reEnable\n");
+
+	for (retry = 1; retry <= RETRY_TIMES; retry++) {
+		rc = smblib_masked_write(chg, CHARGING_ENABLE_CMD_REG,
+				CHARGING_ENABLE_CMD_BIT, 0);
+		if (rc < 0) {
+			smblib_err(chg, "Cannot set CHARGING_ENABLE_CMD_BIT to 0. rc=%d, retry = %d\n",
+					rc, retry);
+			msleep(100);
+		} else {
+			break;
+		}
+	}
+
+	for (retry = 1; retry <= RETRY_TIMES; retry++) {
+		rc = smblib_masked_write(chg, CHARGING_ENABLE_CMD_REG,
+				CHARGING_ENABLE_CMD_BIT,
+				CHARGING_ENABLE_CMD_BIT);
+		if (rc < 0) {
+			smblib_err(chg, "Cannot set CHARGING_ENABLE_CMD_BIT to 1. rc=%d, retry = %d\n",
+					rc, retry);
+			msleep(100);
+		} else {
+			break;
+		}
+	}
+}
+
+void FIH_USBIN_reEnable(struct smb_charger *chg)
+{
+	int rc = 0;
+	int retry = 0;
+
+	smblib_dbg(chg, PR_MISC, "Entering FIH_USBIN_reEnable\n");
+
+	for (retry = 1; retry <= RETRY_TIMES; retry++) {
+		rc = smblib_masked_write(chg, USBIN_CMD_IL_REG,
+				USBIN_SUSPEND_BIT, USBIN_SUSPEND_BIT);
+		if (rc < 0) {
+			smblib_err(chg, "Cannot set USBIN_SUSPEND_BIT to 1. rc=%d, retry = %d\n",
+					rc, retry);
+			msleep(100);
+		} else {
+			break;
+		}
+	}
+
+	for (retry = 1; retry <= RETRY_TIMES; retry++) {
+		rc = smblib_masked_write(chg, USBIN_CMD_IL_REG,
+				USBIN_SUSPEND_BIT, 0);
+		if (rc < 0) {
+			smblib_err(chg, "Cannot set USBIN_SUSPEND_BIT to 0. rc=%d, retry = %d\n",
+					rc, retry);
+			msleep(100);
+		} else {
+			break;
+		}
+	}
+}
+
+#define ABNORMAL_VOLTAGE_THRESHOLD 4200000
+#define CHG_RE_ENABLE_LIMIT 10
+void FIH_chg_abnormal_check(struct smb_charger *chg)
+{
+	union power_supply_propval prop = {0, };
+	int charge_status = 0;
+	int ibat = 0;
+	int vbat = 0;
+	u8 jeita_status = 0;
+	bool jeita_hit = false;
+	int rc = 0;
+
+	if (chg->fih_chg_abnormal_check_en == false)
+		return;
+
+	prop.intval = 0;
+	rc = smblib_get_prop_usb_present(chg, &prop);
+	if (rc < 0) {
+		pr_err("Cannot read usb present in %s\n", __func__);
+		return;
+	}
+	if (prop.intval == 0)
+		return;
+
+	prop.intval = 0;
+	rc = smblib_get_prop_batt_status(chg, &prop);
+	if (rc < 0) {
+		pr_err("Cannot read batt_status in %s\n", __func__);
+		return;
+	}
+	charge_status = prop.intval;
+
+	prop.intval = 0;
+	rc = smblib_get_prop_from_bms(chg,
+			POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
+	if (rc < 0) {
+		pr_err("Cannot read vbat in %s\n", __func__);
+		return;
+	}
+	vbat = prop.intval;
+
+	prop.intval = 0;
+	rc = smblib_get_prop_from_bms(chg,
+			POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
+	if (rc < 0) {
+		pr_err("Cannot read ibat in %s\n", __func__);
+		return;
+	}
+	ibat = prop.intval;
+
+	rc = smblib_read(chg, BATTERY_CHARGER_STATUS_2_REG,
+			&jeita_status);
+	if (rc < 0) {
+		pr_err("Cannot read battery charger status in %s\n",
+				__func__);
+		return;
+	}
+	jeita_hit = (jeita_status & BAT_TEMP_STATUS_MASK) == 0x0 ?
+			false : true;
+
+	if (ibat > 0 && vbat < ABNORMAL_VOLTAGE_THRESHOLD &&
+	    jeita_hit == false &&
+	    chg->fih_reEnable_max_limit <= CHG_RE_ENABLE_LIMIT) {
+		chg->fih_reEnable_max_limit++;
+		pr_err("The vbat = %d, but the ibat is %d, fih_reEnable_limit = %d, tyr to re-enable charging and USBIN\n",
+				vbat, ibat,
+				chg->fih_reEnable_max_limit);
+		FIH_chg_reEnable(chg);
+		FIH_USBIN_reEnable(chg);
+	}
+}
+#endif
+
 static int smblib_get_prop_typec_mode(struct smb_charger *chg)
 {
 	if (chg->typec_status[3] & UFP_DFP_MODE_STATUS_BIT)
@@ -3363,6 +3503,10 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 	power_supply_changed(chg->usb_psy);
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
 					vbus_rising ? "attached" : "detached");
+
+#ifdef CONFIG_MACH_RCL
+	chg->fih_reEnable_max_limit = 0;
+#endif
 }
 
 irqreturn_t smblib_handle_usb_plugin(int irq, void *data)
