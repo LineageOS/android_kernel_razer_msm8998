@@ -214,6 +214,194 @@ module_param_named(
 #define BITE_WDOG_TIMEOUT_8S		0x3
 #define BARK_WDOG_TIMEOUT_MASK		GENMASK(3, 2)
 #define BARK_WDOG_TIMEOUT_SHIFT		2
+
+#ifdef CONFIG_MACH_RCL
+static struct smb2 *mChip = NULL;
+
+static void razer_charge_limit_disable_charge(struct smb_charger *chg, bool disable) {
+	int rc;
+
+	/* If current vote status equals the request, we don't need to do anything */
+	if (disable == chg->razer_charge_limit_active)
+		return;
+
+	/* Place or remove vote for usb icl */
+	rc = vote(chg->usb_icl_votable, RAZER_LIMIT_VOTER, disable, 0);
+	if (rc < 0)
+		goto error;
+
+	/* Place or remove vote for dc suspend */
+	rc = vote(chg->dc_suspend_votable, RAZER_LIMIT_VOTER, disable, 0);
+	if (rc < 0)
+		goto error;
+
+	/* Place or remove vote for sending a hardware signal to disable charging */
+	rc = vote(chg->chg_disable_votable, RAZER_LIMIT_VOTER, disable, 0);
+	if (rc < 0)
+		goto error;
+
+	/* If everything went fine, update the variable */
+	chg->razer_charge_limit_active = disable;
+
+	/* Notify batt_psy about this change */
+	power_supply_changed(chg->batt_psy);
+
+	pr_info("%s: Successfully %s charging.",
+		__func__, disable ? "disabled" : "enabled");
+
+	/* Return to avoid error path */
+	return;
+
+error:
+	pr_err("%s: Vote to %s charging as part of charge limit failed! rc=%d\n",
+		__func__, disable ? "disable" : "enable", rc);
+}
+
+void razer_charge_limit_update(struct smb_charger *chg) {
+	union power_supply_propval cur_pct = {0, };
+	int rc;
+
+	mutex_lock(&chg->razer_charge_limit_lock);
+
+	/* Remove votes if disabled or not connected */
+	if (!chg->razer_charge_limit_enable || chg->typec_mode == POWER_SUPPLY_TYPEC_NONE) {
+		razer_charge_limit_disable_charge(chg, false);
+		goto end;
+	}
+
+	/* Dropdown capacity cannot be higher than or identical to max limit capacity */
+	if (chg->razer_charge_limit_dropdown >= chg->razer_charge_limit_max) {
+		pr_err("%s: Charging limit configuration is not sane, disabling it.", __func__);
+		chg->razer_charge_limit_enable = false;
+		razer_charge_limit_disable_charge(chg, false);
+		goto end;
+	}
+
+	rc = smblib_get_prop_batt_capacity(chg, &cur_pct);
+	if (rc < 0) {
+		pr_err("%s: Failed to get battery capacity, aborting. rc=%d", __func__, rc);
+		goto end;
+	}
+
+	if (cur_pct.intval >= chg->razer_charge_limit_max) {
+		/* Disable charging if the current capacity is at max limit or higher */
+		razer_charge_limit_disable_charge(chg, true);
+	} else if (cur_pct.intval <= chg->razer_charge_limit_dropdown) {
+		/* Enable charging if we are at dropdown capacity or lower */
+		razer_charge_limit_disable_charge(chg, false);
+	}
+
+end:
+	mutex_unlock(&chg->razer_charge_limit_lock);
+}
+
+static ssize_t razer_charge_limit_enable_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct smb_charger *chg = &mChip->chg;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chg->razer_charge_limit_enable);
+}
+
+static ssize_t razer_charge_limit_enable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf,
+		size_t size)
+{
+	struct smb_charger *chg = &mChip->chg;
+	int intval;
+
+	if (sscanf(buf, "%d", &intval) < 1) {
+		pr_err("%s: sscanf failed to parse buffer.\n", __func__);
+		return -EINVAL;
+	}
+
+	if (intval != 0 && intval != 1) {
+		pr_err("%s: Invalid argument: %s\n", __func__, buf);
+		return -EINVAL;
+	}
+	chg->razer_charge_limit_enable = intval;
+
+	/* Update charge limit state for the new data */
+	razer_charge_limit_update(chg);
+
+	return size;
+}
+static DEVICE_ATTR(razer_charge_limit_enable, S_IRUGO | S_IWUSR,
+	razer_charge_limit_enable_show, razer_charge_limit_enable_store);
+
+static ssize_t razer_charge_limit_max_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct smb_charger *chg = &mChip->chg;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chg->razer_charge_limit_max);
+}
+
+#define RAZER_CHARGE_LIMIT_MAX_UPPER 99
+#define RAZER_CHARGE_LIMIT_MAX_LOWER 2
+static ssize_t razer_charge_limit_max_store(struct device *dev,
+		struct device_attribute *attr, const char *buf,
+		size_t size)
+{
+	struct smb_charger *chg = &mChip->chg;
+	int intval;
+
+	if (sscanf(buf, "%d", &intval) < 1) {
+		pr_err("%s: sscanf failed to parse buffer.\n", __func__);
+		return -EINVAL;
+	}
+
+	if (intval < RAZER_CHARGE_LIMIT_MAX_LOWER || intval > RAZER_CHARGE_LIMIT_MAX_UPPER) {
+		pr_err("%s: Invalid argument: %s\n", __func__, buf);
+		return -EINVAL;
+	}
+	chg->razer_charge_limit_max = intval;
+
+	/* Update charge limit state for the new data */
+	razer_charge_limit_update(chg);
+
+	return size;
+}
+static DEVICE_ATTR(razer_charge_limit_max, S_IRUGO | S_IWUSR,
+	razer_charge_limit_max_show, razer_charge_limit_max_store);
+
+static ssize_t razer_charge_limit_dropdown_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct smb_charger *chg = &mChip->chg;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chg->razer_charge_limit_dropdown);
+}
+
+#define RAZER_CHARGE_LIMIT_DROPDOWN_UPPER 98
+#define RAZER_CHARGE_LIMIT_DROPDOWN_LOWER 1
+static ssize_t razer_charge_limit_dropdown_store(struct device *dev,
+		struct device_attribute *attr, const char *buf,
+		size_t size)
+{
+	struct smb_charger *chg = &mChip->chg;
+	int intval;
+
+	if (sscanf(buf, "%d", &intval) < 1) {
+		pr_err("%s: sscanf failed to parse buffer.\n", __func__);
+		return -EINVAL;
+	}
+
+	if (intval < RAZER_CHARGE_LIMIT_DROPDOWN_LOWER || intval > RAZER_CHARGE_LIMIT_DROPDOWN_UPPER) {
+		pr_err("%s: Invalid argument: %s\n", __func__, buf);
+		return -EINVAL;
+	}
+	chg->razer_charge_limit_dropdown = intval;
+
+	/* Update charge limit state for the new data */
+	razer_charge_limit_update(chg);
+
+	return size;
+}
+static DEVICE_ATTR(razer_charge_limit_dropdown, S_IRUGO | S_IWUSR,
+	razer_charge_limit_dropdown_show, razer_charge_limit_dropdown_store);
+#endif
+
 static int smb2_parse_dt(struct smb2 *chip)
 {
 	struct smb_charger *chg = &chip->chg;
@@ -2511,6 +2699,13 @@ static int smb2_probe(struct platform_device *pdev)
 	pr_info("QPNP SMB2 probed successfully usb:present=%d type=%d batt:present = %d health = %d charge = %d\n",
 		usb_present, chg->real_charger_type,
 		batt_present, batt_health, batt_charge_type);
+#ifdef CONFIG_MACH_RCL
+	mChip = chip;
+
+	device_create_file(&pdev->dev, &dev_attr_razer_charge_limit_enable);
+	device_create_file(&pdev->dev, &dev_attr_razer_charge_limit_max);
+	device_create_file(&pdev->dev, &dev_attr_razer_charge_limit_dropdown);
+#endif
 	return rc;
 
 cleanup:

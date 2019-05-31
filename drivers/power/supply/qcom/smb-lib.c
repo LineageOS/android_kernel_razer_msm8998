@@ -40,6 +40,11 @@
 				__func__, ##__VA_ARGS__);	\
 	} while (0)
 
+#ifdef CONFIG_MACH_RCL
+#define RAZER_CHARGE_LIMIT_MAX_DEFAULT 70
+#define RAZER_CHARGE_LIMIT_DROPDOWN_DEFAULT 65
+#endif
+
 static bool is_secure(struct smb_charger *chg, int addr)
 {
 	if (addr == SHIP_MODE_REG || addr == FREQ_CLK_DIV_REG)
@@ -587,6 +592,12 @@ static int smblib_notifier_call(struct notifier_block *nb,
 
 	if (!chg->pl.psy && !strcmp(psy->desc->name, "parallel"))
 		chg->pl.psy = psy;
+
+#ifdef CONFIG_MACH_RCL
+	/* Do updates for charging limit if necessary */
+	if (chg->razer_charge_limit_enable)
+		schedule_work(&chg->razer_charge_limit_update_work);
+#endif
 
 	return NOTIFY_OK;
 }
@@ -2350,6 +2361,11 @@ void FIH_chg_reEnable(struct smb_charger *chg)
 
 	smblib_dbg(chg, PR_MISC, "Entering FIH_chg_reEnable\n");
 
+	/* Executing the FIH recharge workaround would break the vote system */
+	if (chg->razer_charge_limit_active) {
+		return;
+	}
+
 	for (retry = 1; retry <= RETRY_TIMES; retry++) {
 		rc = smblib_masked_write(chg, CHARGING_ENABLE_CMD_REG,
 				CHARGING_ENABLE_CMD_BIT, 0);
@@ -2382,6 +2398,11 @@ void FIH_USBIN_reEnable(struct smb_charger *chg)
 	int retry = 0;
 
 	smblib_dbg(chg, PR_MISC, "Entering FIH_USBIN_reEnable\n");
+
+	/* Executing the FIH recharge workaround would break the vote system */
+	if (chg->razer_charge_limit_active) {
+		return;
+	}
 
 	for (retry = 1; retry <= RETRY_TIMES; retry++) {
 		rc = smblib_masked_write(chg, USBIN_CMD_IL_REG,
@@ -2470,7 +2491,8 @@ void FIH_chg_abnormal_check(struct smb_charger *chg)
 
 	if (ibat > 0 && vbat < ABNORMAL_VOLTAGE_THRESHOLD &&
 	    jeita_hit == false &&
-	    chg->fih_reEnable_max_limit <= CHG_RE_ENABLE_LIMIT) {
+	    chg->fih_reEnable_max_limit <= CHG_RE_ENABLE_LIMIT &&
+	    !chg->razer_charge_limit_active) {
 		chg->fih_reEnable_max_limit++;
 		pr_err("The vbat = %d, but the ibat is %d, fih_reEnable_limit = %d, tyr to re-enable charging and USBIN\n",
 				vbat, ibat,
@@ -4838,6 +4860,19 @@ rerun:
 	schedule_work(&chg->rdstd_cc2_detach_work);
 }
 
+#ifdef CONFIG_MACH_RCL
+static void razer_charge_limit_update_work(struct work_struct *work)
+{
+
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+						razer_charge_limit_update_work);
+
+	/* Verify that batt_psy init is complete and call our handler */
+	if (chg->batt_psy)
+		razer_charge_limit_update(chg);
+}
+#endif
+
 static void smblib_otg_oc_exit(struct smb_charger *chg, bool success)
 {
 	int rc;
@@ -5300,6 +5335,15 @@ int smblib_init(struct smb_charger *chg)
 	INIT_WORK(&chg->legacy_detection_work, smblib_legacy_detection_work);
 	INIT_DELAYED_WORK(&chg->uusb_otg_work, smblib_uusb_otg_work);
 	INIT_DELAYED_WORK(&chg->bb_removal_work, smblib_bb_removal_work);
+#ifdef CONFIG_MACH_RCL
+	/* Razer charge limiting system */
+	INIT_WORK(&chg->razer_charge_limit_update_work, razer_charge_limit_update_work);
+	mutex_init(&chg->razer_charge_limit_lock);
+	chg->razer_charge_limit_enable = false;
+	chg->razer_charge_limit_active = false;
+	chg->razer_charge_limit_max = RAZER_CHARGE_LIMIT_MAX_DEFAULT;
+	chg->razer_charge_limit_dropdown = RAZER_CHARGE_LIMIT_DROPDOWN_DEFAULT;
+#endif
 	chg->fake_capacity = -EINVAL;
 	chg->fake_input_current_limited = -EINVAL;
 
