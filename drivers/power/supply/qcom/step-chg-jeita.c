@@ -63,6 +63,9 @@ struct step_chg_info {
 	int			jeita_fcc_index;
 	int			jeita_fv_index;
 	int			step_index;
+#ifdef CONFIG_MACH_RCL
+	int			last_jeita_status;
+#endif
 
 	struct votable		*fcc_votable;
 	struct votable		*fv_votable;
@@ -151,9 +154,16 @@ static bool is_batt_available(struct step_chg_info *chip)
 	return true;
 }
 
+#ifdef CONFIG_MACH_RCL
+static int get_val(struct range_data *range, int hysteresis, int current_index,
+		int threshold,
+		int *new_index, int *val,
+		int last_jeita_status, int current_jeita_status)
+#else
 static int get_val(struct range_data *range, int hysteresis, int current_index,
 		int threshold,
 		int *new_index, int *val)
+#endif
 {
 	int i;
 
@@ -182,6 +192,18 @@ static int get_val(struct range_data *range, int hysteresis, int current_index,
 	 * Check for hysteresis if it in the neighbourhood
 	 * of our current index.
 	 */
+#ifdef CONFIG_MACH_RCL
+	/*
+	 * If the health is from GOOD to WARM or COOL,
+	 * we need to react immediately, ignore the hysteresis
+	 */
+	if (last_jeita_status == POWER_SUPPLY_HEALTH_GOOD &&
+	   (current_jeita_status == POWER_SUPPLY_HEALTH_COOL ||
+	    current_jeita_status == POWER_SUPPLY_HEALTH_WARM)) {
+		return 0;
+	}
+#endif
+
 	if (*new_index == current_index + 1) {
 		if (threshold < range[*new_index].low_threshold + hysteresis) {
 			/*
@@ -235,11 +257,21 @@ static int handle_step_chg_config(struct step_chg_info *chip)
 		return rc;
 	}
 
+#ifdef CONFIG_MACH_RCL
+	rc = get_val(step_chg_config.fcc_cfg, step_chg_config.hysteresis,
+			chip->step_index,
+			pval.intval,
+			&chip->step_index,
+			&fcc_ua,
+			POWER_SUPPLY_HEALTH_GOOD,
+			POWER_SUPPLY_HEALTH_GOOD);
+#else
 	rc = get_val(step_chg_config.fcc_cfg, step_chg_config.hysteresis,
 			chip->step_index,
 			pval.intval,
 			&chip->step_index,
 			&fcc_ua);
+#endif
 	if (rc < 0) {
 		/* remove the vote if no step-based fcc is found */
 		if (chip->fcc_votable)
@@ -269,6 +301,9 @@ reschedule:
 static int handle_jeita(struct step_chg_info *chip)
 {
 	union power_supply_propval pval = {0, };
+#ifdef CONFIG_MACH_RCL
+	union power_supply_propval jeita_pval = {0, };
+#endif
 	int rc = 0, fcc_ua = 0, fv_uv = 0;
 	u64 elapsed_us;
 
@@ -299,11 +334,29 @@ static int handle_jeita(struct step_chg_info *chip)
 		return rc;
 	}
 
+#ifdef CONFIG_MACH_RCL
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_HEALTH, &jeita_pval);
+
+	if (rc < 0) {
+		pr_err("Could not get battery health in handle_jeita\n");
+		return rc;
+	}
+
+	rc = get_val(jeita_fcc_config.fcc_cfg, jeita_fcc_config.hysteresis,
+			chip->jeita_fcc_index,
+			pval.intval,
+			&chip->jeita_fcc_index,
+			&fcc_ua,
+			chip->last_jeita_status,
+			jeita_pval.intval);
+#else
 	rc = get_val(jeita_fcc_config.fcc_cfg, jeita_fcc_config.hysteresis,
 			chip->jeita_fcc_index,
 			pval.intval,
 			&chip->jeita_fcc_index,
 			&fcc_ua);
+#endif
 	if (rc < 0) {
 		/* remove the vote if no step-based fcc is found */
 		if (chip->fcc_votable)
@@ -319,11 +372,24 @@ static int handle_jeita(struct step_chg_info *chip)
 
 	vote(chip->fcc_votable, JEITA_VOTER, true, fcc_ua);
 
+#ifdef CONFIG_MACH_RCL
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_HEALTH, &jeita_pval);
+
+	rc = get_val(jeita_fv_config.fv_cfg, jeita_fv_config.hysteresis,
+			chip->jeita_fv_index,
+			pval.intval,
+			&chip->jeita_fv_index,
+			&fv_uv,
+			chip->last_jeita_status,
+			jeita_pval.intval);
+#else
 	rc = get_val(jeita_fv_config.fv_cfg, jeita_fv_config.hysteresis,
 			chip->jeita_fv_index,
 			pval.intval,
 			&chip->jeita_fv_index,
 			&fv_uv);
+#endif
 	if (rc < 0) {
 		/* remove the vote if no step-based fcc is found */
 		if (chip->fv_votable)
@@ -341,6 +407,9 @@ static int handle_jeita(struct step_chg_info *chip)
 		jeita_fv_config.prop_name, pval.intval, fcc_ua, fv_uv);
 
 update_time:
+#ifdef CONFIG_MACH_RCL
+	chip->last_jeita_status = jeita_pval.intval;
+#endif
 	chip->jeita_last_update_time = ktime_get();
 	return 0;
 
