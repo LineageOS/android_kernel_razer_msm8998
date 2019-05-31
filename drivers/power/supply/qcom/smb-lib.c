@@ -3757,7 +3757,11 @@ static void smblib_handle_hvdcp_detect_done(struct smb_charger *chg,
 
 static void smblib_force_legacy_icl(struct smb_charger *chg, int pst)
 {
+#ifdef CONFIG_MACH_RCL
+	int typec_mode = 0;
+#else
 	int typec_mode;
+#endif
 	int rp_ua;
 
 	/* while PD is active it should have complete ICL control */
@@ -3783,6 +3787,19 @@ static void smblib_force_legacy_icl(struct smb_charger *chg, int pst)
 		typec_mode = smblib_get_prop_typec_mode(chg);
 		rp_ua = get_rp_based_dcp_current(chg, typec_mode);
 		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, rp_ua);
+#ifdef CONFIG_MACH_RCL
+		typec_mode = smblib_get_prop_ufp_mode(chg);
+		if (typec_mode == POWER_SUPPLY_TYPEC_SOURCE_MEDIUM) {
+			vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true,
+					TYPEC_MEDIUM_CURRENT_UA);
+		} else if (typec_mode == POWER_SUPPLY_TYPEC_SOURCE_HIGH) {
+			vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true,
+					TYPEC_HIGH_CURRENT_UA);
+		} else {
+			vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true,
+					TYPEC_MEDIUM_CURRENT_UA);
+		}
+#endif
 		break;
 	case POWER_SUPPLY_TYPE_USB_FLOAT:
 		/*
@@ -4350,6 +4367,9 @@ static void smblib_handle_typec_cc_state_change(struct smb_charger *chg)
 void smblib_usb_typec_change(struct smb_charger *chg)
 {
 	int rc;
+#ifdef CONFIG_MACH_RCL
+	int typec_mode = 0;
+#endif
 
 	rc = smblib_multibyte_read(chg, TYPE_C_STATUS_1_REG,
 							chg->typec_status, 5);
@@ -4366,6 +4386,19 @@ void smblib_usb_typec_change(struct smb_charger *chg)
 	if (chg->typec_status[3] & TYPEC_VCONN_OVERCURR_STATUS_BIT)
 		schedule_work(&chg->vconn_oc_work);
 
+#ifdef CONFIG_MACH_RCL
+	typec_mode = smblib_get_prop_ufp_mode(chg);
+	if (typec_mode == POWER_SUPPLY_TYPEC_SOURCE_MEDIUM) {
+		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true,
+				TYPEC_MEDIUM_CURRENT_UA);
+	} else if (typec_mode == POWER_SUPPLY_TYPEC_SOURCE_HIGH) {
+		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true,
+				TYPEC_HIGH_CURRENT_UA);
+	} else {
+		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true,
+				TYPEC_MEDIUM_CURRENT_UA);
+	}
+#endif
 	power_supply_changed(chg->usb_psy);
 }
 
