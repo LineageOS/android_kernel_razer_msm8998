@@ -18,7 +18,6 @@
  *
  *
  * Copyright (c) 2015 Fingerprint Cards AB <tech@fingerprints.com>
- * Copyright (c) 2017 Razer Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License Version 2
@@ -63,13 +62,6 @@ struct fpc1020_data {
 
 	struct pinctrl *fingerprint_pinctrl;
 	struct pinctrl_state *pinctrl_state[ARRAY_SIZE(pctl_names)];
-
-	// alex.naidis@paranoidandroid.co Manage IRQ activity based on screen state - start
-	spinlock_t irq_activity_lock;
-	bool fpc_irq_active;
-	bool screen_on;
-	struct notifier_block fb_notif;
-	// alex.naidis@paranoidandroid.co Manage IRQ activity based on screen state - end
 
 	struct wake_lock ttw_wl;
 	int irq_gpio;
@@ -261,74 +253,6 @@ static const struct attribute_group attribute_group = {
 	.attrs = attributes,
 };
 
-// alex.naidis@paranoidandroid.co Manage IRQ activity based on screen state - start
-/**
- * Method to handle changes in FPC IRQ activity
- */
-static int irq_active_toggle(bool request_active, struct device *dev)
-{
-
-	int rc = 0;
-	struct fpc1020_data *fpc1020 = dev_get_drvdata(dev);
-
-	if (!request_active && fpc1020->screen_on) {
-		pr_warn("fpc1020: irq_active_toggle: Unsynced IRQ toggle request received. Ignoring... \n");
-		return 0;
-	}
-
-	spin_lock(&fpc1020->irq_activity_lock);
-
-	if (request_active && !fpc1020->fpc_irq_active) {
-		enable_irq(gpio_to_irq(fpc1020->irq_gpio));
-		fpc1020->fpc_irq_active = true;
-		pr_info("fpc1020: irq_active_toggle: IRQ enabled. \n");
-	} else if (!request_active && fpc1020->fpc_irq_active) {
-		disable_irq(gpio_to_irq(fpc1020->irq_gpio));
-		fpc1020->fpc_irq_active = false;
-		pr_info("fpc1020: irq_active_toggle: IRQ disabled. \n");
-	} else {
-		pr_warn("fpc1020: irq_active_toggle: Invalid IRQ toggle request received. \n");
-		rc = 1;
-	}
-
-	spin_unlock(&fpc1020->irq_activity_lock);
-
-	return rc;
-}
-
-static int fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
-{
-	struct fpc1020_data *fpc1020 = container_of(self, struct fpc1020_data, fb_notif);
-	struct fb_event *evdata = data;
-	int *blank;
-	int rc = NOTIFY_DONE;
-
-	if ((event == FB_EVENT_BLANK) && evdata && evdata->data) {
-
-		blank = evdata->data;
-
-		switch (*blank) {
-		case FB_BLANK_POWERDOWN:
-			fpc1020->screen_on = false;
-			pr_info("fpc1020: suspending++\n");
-			(void) irq_active_toggle(false, fpc1020->dev);
-			pr_info("fpc1020: suspended--\n");
-			rc = NOTIFY_OK;
-		break;
-		case FB_BLANK_UNBLANK:
-			fpc1020->screen_on = true;
-			pr_info("fpc1020: resuming++\n");
-			(void) irq_active_toggle(true, fpc1020->dev);
-			pr_info("fpc1020: resumed--\n");
-			rc = NOTIFY_OK;
-		break;
-		}
-	}
-
-	return rc;
-}
-// alex.naidis@paranoidandroid.co Manage IRQ activity based on screen state - end
-
 static irqreturn_t fpc1020_irq_handler(int irq, void *handle)
 {
 	struct fpc1020_data *fpc1020 = handle;
@@ -454,25 +378,10 @@ static int fpc1020_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
-	// alex.naidis@paranoidandroid.co Manage IRQ activity based on screen state - start
-	spin_lock_init(&fpc1020->irq_activity_lock);
-	fpc1020->fpc_irq_active = true;
-	fpc1020->screen_on = true;
-
-	fpc1020->fb_notif.notifier_call = fb_notifier_callback;
-	fpc1020->fb_notif.priority = 10;
-
-	rc = fb_register_client(&fpc1020->fb_notif);
-	if (rc) {
-		dev_err(fpc1020->dev, "Unable to register fb_notifier: %d\n", rc);
-		goto exit;
-	}
-	// alex.naidis@paranoidandroid.co Manage IRQ activity based on screen state - end
-
 	dev_dbg(dev, "requested irq %d\n", gpio_to_irq(fpc1020->irq_gpio));
 
 	/* Request that the interrupt should be wakeable */
-	// enable_irq_wake(gpio_to_irq(fpc1020->irq_gpio)); alex.naidis@paranoidandroid.co Make IRQ non-wakable
+	enable_irq_wake(gpio_to_irq(fpc1020->irq_gpio));
 
 	wake_lock_init(&fpc1020->ttw_wl, WAKE_LOCK_SUSPEND, "fpc_ttw_wl");
 
@@ -494,9 +403,6 @@ static int fpc1020_remove(struct platform_device *pdev)
 {
 	struct fpc1020_data *fpc1020 = platform_get_drvdata(pdev);
 
-	// alex.naidis@paranoidandroid.co Manage IRQ activity based on screen state - start
-	fb_unregister_client(&fpc1020->fb_notif);
-	// alex.naidis@paranoidandroid.co Manage IRQ activity based on screen state - end
 	sysfs_remove_group(&pdev->dev.kobj, &attribute_group);
 	mutex_destroy(&fpc1020->lock);
 	wake_lock_destroy(&fpc1020->ttw_wl);
