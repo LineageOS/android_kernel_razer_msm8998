@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,18 +10,17 @@
  * GNU General Public License for more details.
  */
 
-#include "pinctrl-msm8998.dtsi"
-#include "platform-msm8998.dtsi"
-#include "thermal.dtsi"
-#include "power.dtsi"
-#include "memmap.dtsi"
-#include "touch.dtsi"
-#include "camera.dtsi"
-#include "audio.dtsi"
-#include "rgb.dtsi"
-#include "keypad.dtsi"
-#include "vibrator.dtsi"
-#include "usb-redriver.dtsi"
-#include "fingerprint.dtsi"
-#include "nfc.dtsi"
-#include "sd.dtsi"
+/* Display */
+&ibb_regulator {
+	qcom,qpnp-ibb-init-lcd-voltage = <5800000>;
+	qcom,qpnp-ibb-init-voltage = <5800000>;
+	qcom,qpnp-ibb-enable-pfm-mode;
+	qcom,qpnp-ibb-pfm-peak-curr = <350>;
+	qcom,qpnp-ibb-pfm-hysteresis = <0>;
+};
+
+&lab_regulator {
+	qcom,qpnp-lab-init-lcd-voltage = <5800000>;
+	qcom,qpnp-lab-init-voltage = <5800000>;
+	qcom,qpnp-lab-enable-pfm-mode;
+};

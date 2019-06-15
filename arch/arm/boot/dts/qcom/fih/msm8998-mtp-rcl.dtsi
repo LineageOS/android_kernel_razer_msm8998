@@ -11,7 +11,11 @@
  */
 
 #include <dt-bindings/interrupt-controller/irq.h>
+#include "msm-pmi8998-rcl.dtsi"
 #include "msm8998-camera-sensor-mtp-rcl.dtsi"
+#include "msm8998-pinctrl-rcl.dtsi"
+#include "msm8998-regulator-rcl.dtsi"
+
 &vendor {
 	bluetooth: bt_wcn3990 {
 		compatible = "qca,wcn3990";
@@ -241,26 +245,16 @@
 };
 
 &mdss_hdmi_tx {
-	pinctrl-names = "hdmi_hpd_active", "hdmi_ddc_active", "hdmi_cec_active",
-				"hdmi_active", "hdmi_sleep";
-	pinctrl-0 = <&mdss_hdmi_5v_active  &mdss_hdmi_hpd_active
-			&mdss_hdmi_ddc_suspend &mdss_hdmi_cec_suspend>;
-	pinctrl-1 = <&mdss_hdmi_5v_active &mdss_hdmi_hpd_active
-			&mdss_hdmi_ddc_active &mdss_hdmi_cec_suspend>;
-	pinctrl-2 = <&mdss_hdmi_5v_active &mdss_hdmi_hpd_active
-			&mdss_hdmi_cec_active &mdss_hdmi_ddc_suspend>;
-	pinctrl-3 = <&mdss_hdmi_5v_active &mdss_hdmi_hpd_active
-			&mdss_hdmi_ddc_active &mdss_hdmi_cec_active>;
-	pinctrl-4 = <&mdss_hdmi_5v_suspend &mdss_hdmi_hpd_suspend
-			&mdss_hdmi_ddc_suspend &mdss_hdmi_cec_suspend>;
+	status = "disabled";
 };
 
 &mdss_dp_ctrl {
 	pinctrl-names = "mdss_dp_active", "mdss_dp_sleep";
-	pinctrl-0 = <&mdss_dp_aux_active &mdss_dp_usbplug_cc_active>;
-	pinctrl-1 = <&mdss_dp_aux_suspend &mdss_dp_usbplug_cc_suspend>;
+	pinctrl-0 = <&mdss_dp_aux_active &mdss_dp_usbplug_cc_active &mdss_dp_fih_hpd_active>;
+	pinctrl-1 = <&mdss_dp_aux_suspend &mdss_dp_usbplug_cc_suspend &mdss_dp_fih_hpd_suspend>;
 	qcom,aux-en-gpio = <&tlmm 77 0>;
 	qcom,aux-sel-gpio = <&tlmm 78 0>;
+	qcom,hpd-gpio = <&tlmm 115 0>;
 	qcom,usbplug-cc-gpio = <&tlmm 38 0>;
 };
 
@@ -270,24 +264,34 @@
 
 &mdss_dsi {
 	hw-config = "split_dsi";
+
+	qcom,phy-supply-entries {
+		qcom,phy-supply-entry@0 {
+			/delete-property/ qcom,supply-lp-mode-disable-allowed;
+		};
+	};
 };
 
 &mdss_dsi0 {
+	wqhd-vdd-supply = <&pm8998_l6>;
+
+	qcom,dsi-pref-prim-pan = <&dsi_nt36830_wqhd_dualdsi_cmd>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
 	qcom,platform-reset-gpio = <&tlmm 94 0>;
 	qcom,platform-te-gpio = <&tlmm 10 0>;
-	qcom,panel-mode-gpio = <&tlmm 91 0>;
 };
 
 &mdss_dsi1 {
+	wqhd-vdd-supply = <&pm8998_l6>;
+
+	qcom,dsi-pref-prim-pan = <&dsi_nt36830_wqhd_dualdsi_cmd>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
 	qcom,platform-reset-gpio = <&tlmm 94 0>;
 	qcom,platform-te-gpio = <&tlmm 10 0>;
-	qcom,panel-mode-gpio = <&tlmm 91 0>;
 };
 
 &labibb {
@@ -296,7 +300,10 @@
 };
 
 &pmi8998_wled {
-	qcom,led-strings-list = [00 01];
+	qcom,led-strings-list = [00 01 02];
+	qcom,fs-curr-ua = <20000>;
+	qcom,switch-freq-khz = <1600>;
+	qcom,en-cabc;
 };
 
 &red_led {

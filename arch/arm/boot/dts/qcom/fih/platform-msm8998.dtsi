@@ -45,23 +45,6 @@
 	pinctrl-1 = <&msm8998_gpio45_active &msm8998_gpio46_active &msm8998_gpio47_active &msm8998_gpio48_active>;
 };
 
-&mdss_dsi0 {
-	pinctrl-names = "mdss_default", "mdss_sleep";
-	pinctrl-0 = <&msm8998_gpio94_active &msm8998_gpio10_active>;
-	pinctrl-1 = <&msm8998_gpio94_suspend &msm8998_gpio10_suspend>;
-	qcom,dsi-pref-prim-pan = <&dsi_nt35597_dsc_cmd_pm1>;
-	qcom,platform-reset-gpio = <&tlmm 94 0>;
-	qcom,platform-te-gpio = <&tlmm 10 0>;
-	qcom,panel-mode-gpio = <>;
-	qcom,display-id = "primary";
-};
-
-&mdss_dsi1 {
-	pinctrl-names = "mdss_default", "mdss_sleep";
-	pinctrl-0 = <>;
-	pinctrl-1 = <>;
-};
-
 &cci {
 	actuator0: qcom,actuator@0 {
 		pinctrl-names = "cam_default", "cam_suspend";
@@ -110,28 +93,6 @@
 		pinctrl-0 = <>;
 		pinctrl-1 = <>;
 	};
-};
-
-&mdss_hdmi_tx {
-	pinctrl-names = "hdmi_hpd_active", "hdmi_ddc_active", "hdmi_cec_active",
-				"hdmi_active", "hdmi_sleep";
-	pinctrl-0 = <>;
-	pinctrl-1 = <>;
-	pinctrl-2 = <>;
-	pinctrl-3 = <>;
-	pinctrl-4 = <>;
-};
-
-&mdss_dp_ctrl {
-	pinctrl-names = "mdss_dp_active", "mdss_dp_sleep";
-	pinctrl-0 = <&msm8998_gpio77_active &msm8998_gpio78_active &msm8998_gpio38_active>;
-	pinctrl-1 = <&msm8998_gpio77_suspend &msm8998_gpio78_suspend &msm8998_gpio38_suspend>;
-};
-
-&mdss_dp_ctrl {
-	pinctrl-0 = <&mdss_dp_aux_active &mdss_dp_usbplug_cc_active &mdss_dp_fih_hpd_active>;
-	pinctrl-1 = <&mdss_dp_aux_suspend &mdss_dp_usbplug_cc_suspend &mdss_dp_fih_hpd_suspend>;
-	qcom,hpd-gpio = <&tlmm 115 0>;
 };
 
 &slim_aud {
