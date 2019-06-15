@@ -24,3 +24,47 @@
 	qcom,qpnp-lab-init-voltage = <5800000>;
 	qcom,qpnp-lab-enable-pfm-mode;
 };
+
+&spmi_bus {
+	qcom,pmi8998@3 {
+		qcom,leds@d000 {
+			qcom,rgb-sync;
+
+			red_led: qcom,rgb_0 {
+				qcom,start-idx = <0>;
+				qcom,idx-len = <8>;
+				qcom,duty-pcts = [ 00 0E 1C 2A 38 46 54 64 ];
+				qcom,lut-flags = <31>; /* loop, ramp up, reverse, pause hi, pause lo */
+				qcom,pause-lo = <500>;
+				qcom,pause-hi = <500>;
+				qcom,ramp-step-ms = <50>;
+				qcom,use-blink;
+				linux,default-trigger = "none";
+			};
+
+			green_led: qcom,rgb_1 {
+				qcom,start-idx = <0>;
+				qcom,idx-len = <8>;
+				qcom,duty-pcts = [ 00 0E 1C 2A 38 46 54 64 ];
+				qcom,lut-flags = <31>; /* loop, ramp up, reverse, pause hi, pause lo */
+				qcom,pause-lo = <500>;
+				qcom,pause-hi = <500>;
+				qcom,ramp-step-ms = <50>;
+				qcom,use-blink;
+				linux,default-trigger = "none";
+			};
+
+			blue_led: qcom,rgb_2 {
+				qcom,start-idx = <0>;
+				qcom,idx-len = <8>;
+				qcom,duty-pcts = [ 00 0E 1C 2A 38 46 54 64 ];
+				qcom,lut-flags = <31>; /* loop, ramp up, reverse, pause hi, pause lo */
+				qcom,pause-lo = <500>;
+				qcom,pause-hi = <500>;
+				qcom,ramp-step-ms = <50>;
+				qcom,use-blink;
+				linux,default-trigger = "none";
+			};
+		};
+	};
+};

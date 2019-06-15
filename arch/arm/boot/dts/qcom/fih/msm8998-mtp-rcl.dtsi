@@ -307,19 +307,6 @@
 	qcom,en-cabc;
 };
 
-&red_led {
-	/delete-property/ linux,default-trigger;
-	qcom,start-idx = <0>;
-	qcom,idx-len = <10>;
-	qcom,duty-pcts = [00 19 32 4b 64
-			64 4b 32 19 00];
-	qcom,use-blink;
-};
-
-&green_led {
-	/delete-property/ linux,default-trigger;
-};
-
 &mem_client_3_size {
 	qcom,peripheral-size = <0x500000>;
 };
