@@ -230,6 +230,17 @@
 	};
 };
 
+&i2c_8 { /* BLSP2 QUP2 */
+	status = "okay";
+	tusb544@12 {
+		compatible = "ti,tusb544";
+		reg = <0x12>;
+		fih,redriver-en = <&tlmm 25 0>;
+		extcon = <&pmi8998_pdphy>;
+		qcom,dp-usbpd-detection = <&pmi8998_pdphy>;
+	};
+};
+
 &i2c_9 { /* BLSP2 QUP3 */
 	status = "okay";
 	tfa98xx@34 { /* Bottom */
