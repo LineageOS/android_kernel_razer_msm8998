@@ -17,7 +17,6 @@
 
 #include "fih/msm8998-mdss-panels-rcl.dtsi"
 #include "fih/msm8998-mtp-rcl.dtsi"
-#include "fih/rcl.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM8998 v2.1 MTP, FIH RCL PVT";
