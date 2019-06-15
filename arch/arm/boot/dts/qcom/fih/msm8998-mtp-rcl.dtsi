@@ -186,26 +186,24 @@
 
 &i2c_5 {
 	status = "okay";
-	synaptics@20 {
-		compatible = "synaptics,dsx";
+	qcom,disable-dma = <1>;
+
+	synaptics_dsx@20 {
+		compatible = "synaptics,dsx-i2c";
 		reg = <0x20>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <125 0x2008>;
-		vdd-supply = <&pm8998_l6>;
-		avdd-supply = <&pm8998_l28>;
-		synaptics,vdd-voltage = <1808000 1808000>;
-		synaptics,avdd-voltage = <3008000 3008000>;
-		synaptics,vdd-current = <40000>;
-		synaptics,avdd-current = <20000>;
-		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
-		pinctrl-0 = <&ts_active>;
-		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
-		synaptics,display-coords = <0 0 1439 2559>;
-		synaptics,panel-coords = <0 0 1439 2559>;
+		vdd-supply = <&pm8998_l28>;
+		synaptics,power-gpio = <&tlmm 21 0x00>;
+		synaptics,pwr-reg-name = "vdd";
+		synaptics,power-on-state = <1>;
+		synaptics,display-coords = <0 0 1599 2559>;
+		synaptics,panel-coords = <0 0 1599 2703>;
+		synaptics,irq-gpio = <&tlmm 125 0x2008>; /* IRQF_ONESHOT | IRQF_TRIGGER_LOW */
 		synaptics,reset-gpio = <&tlmm 89 0x00>;
-		synaptics,irq-gpio = <&tlmm 125 0x2008>;
-		synaptics,disable-gpios;
-		synaptics,fw-name = "PR1702898-s3528t_60QHD_00400001.img";
+		synaptics,reset-delay-ms = <100>;
+		synaptics,reset-on-state = <0>;
+		synaptics,reset-active-ms = <20>;
 	};
 };
 
