@@ -1,4 +1,5 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,6 +11,36 @@
  * GNU General Public License for more details.
  */
 
-#include "pinctrl-msm8998.dtsi"
-#include "platform-msm8998.dtsi"
-#include "sd.dtsi"
+/ {
+	aliases {
+		i2c5 = &i2c_5;
+		i2c8 = &i2c_8;
+		spi1 = &spi_1;
+		spi12 = &spi_12;
+	};
+};
+
+&soc {
+	spi_1: spi@c175000 { /* BLSP1 QUP1 */
+		status = "ok";
+	};
+
+	spi_5: spi@c179000 { /* BLSP1 QUP5 */
+		status = "okay";
+	};
+
+	spi_12: spi@c1ba000 { /* BLSP2 QUP6 */
+		status = "ok";
+	};
+
+	pcie0: qcom,pcie@01c00000 {
+		pinctrl-names = "default";
+		pinctrl-0 = <>;
+		wake-gpio = <> ;
+	};
+
+	cti2: cti@6012000 {
+		pinctrl-names = "cti-trigout-pctrl";
+		pinctrl-0 = <>;
+	};
+};
