@@ -36,56 +36,6 @@
 	pinctrl-1 = <&msm8998_gpio45_active &msm8998_gpio46_active &msm8998_gpio47_active &msm8998_gpio48_active>;
 };
 
-&cci {
-	actuator0: qcom,actuator@0 {
-		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <&msm8998_gpio28_active>;
-		pinctrl-1 = <&msm8998_gpio28_suspend>;
-	};
-
-	actuator1: qcom,actuator@1 {
-		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <&msm8998_gpio30_active>;
-		pinctrl-1 = <&msm8998_gpio30_suspend>;
-	};
-
-	eeprom0: qcom,eeprom@0 {
-		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <>;
-		pinctrl-1 = <>;
-	};
-
-	eeprom1: qcom,eeprom@1 {
-		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <>;
-		pinctrl-1 = <>;
-	};
-
-	eeprom2: qcom,eeprom@2 {
-		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <>;
-		pinctrl-1 = <>;
-	};
-
-	qcom,camera@0 {
-		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <>;
-		pinctrl-1 = <>;
-	};
-
-	qcom,camera@1 {
-		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <>;
-		pinctrl-1 = <>;
-	};
-
-	qcom,camera@2 {
-		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <>;
-		pinctrl-1 = <>;
-	};
-};
-
 &slim_aud {
 	tasha_codec {
 		wsa_spkr_sd1: msm_cdc_pinctrll {
@@ -169,12 +119,6 @@
 		pinctrl-names = "aud_active", "aud_sleep";
 		pinctrl-0 = <&msm8998_gpio64_active>;
 		pinctrl-1 = <&msm8998_gpio64_sleep>;
-	};
-
-	cci: qcom,cci@ca0c000 {
-		pinctrl-names = "cci_default", "cci_suspend";
-		pinctrl-0 = <&msm8998_gpio17_active &msm8998_gpio18_active &msm8998_gpio19_active &msm8998_gpio20_active>;
-		pinctrl-1 = <&msm8998_gpio17_suspend &msm8998_gpio18_suspend &msm8998_gpio19_suspend &msm8998_gpio20_suspend>;
 	};
 
 	pcie0: qcom,pcie@01c00000 {

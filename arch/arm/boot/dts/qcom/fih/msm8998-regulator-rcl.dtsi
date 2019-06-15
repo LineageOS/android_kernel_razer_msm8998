@@ -10,6 +10,12 @@
  * GNU General Public License for more details.
  */
 
+/* Camera */
+&pm8998_l19 {
+	regulator-min-microvolt = <3000000>;
+	regulator-max-microvolt = <3000000>;
+};
+
 /* Display */
 &pm8998_l6 {
 	regulator-min-microvolt = <1800000>;

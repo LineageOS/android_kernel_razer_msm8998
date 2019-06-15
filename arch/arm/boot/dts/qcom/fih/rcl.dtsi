@@ -16,7 +16,6 @@
 #include "power.dtsi"
 #include "memmap.dtsi"
 #include "touch.dtsi"
-#include "camera.dtsi"
 #include "audio.dtsi"
 #include "rgb.dtsi"
 #include "keypad.dtsi"
