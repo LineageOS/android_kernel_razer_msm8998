@@ -12,5 +12,4 @@
 
 #include "pinctrl-msm8998.dtsi"
 #include "platform-msm8998.dtsi"
-#include "power.dtsi"
 #include "sd.dtsi"
