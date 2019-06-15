@@ -13,6 +13,7 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 #include "msm-pm8998-rcl.dtsi"
 #include "msm-pmi8998-rcl.dtsi"
+#include "msm8998-audio-rcl.dtsi"
 #include "msm8998-camera-sensor-mtp-rcl.dtsi"
 #include "msm8998-pinctrl-rcl.dtsi"
 #include "msm8998-regulator-rcl.dtsi"
@@ -226,6 +227,21 @@
 		pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend>;
 		clocks = <&clock_gcc clk_ln_bb_clk3_pin>;
 		clock-names = "ref_clk";
+	};
+};
+
+&i2c_9 { /* BLSP2 QUP3 */
+	status = "okay";
+	tfa98xx@34 { /* Bottom */
+		compatible = "nxp,tfa98xx";
+		reg = <0x34>;
+		reset-gpio = <&tlmm 49 0>;
+		irq-gpio = <&tlmm 34 0>;
+	};
+
+	tfa98xx@35 { /* Top */
+		compatible = "nxp,tfa98xx";
+		reg = <0x35>;
 	};
 };
 

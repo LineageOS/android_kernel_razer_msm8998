@@ -15,50 +15,12 @@
 	aliases {
 		i2c5 = &i2c_5;
 		i2c8 = &i2c_8;
-		i2c9 = &i2c_9;
 		spi1 = &spi_1;
 		spi12 = &spi_12;
 	};
 };
 
-&slim_aud {
-	tasha_codec {
-		wsa_spkr_sd1: msm_cdc_pinctrll {
-			pinctrl-names = "aud_active", "aud_sleep";
-			pinctrl-0 = <>;
-			pinctrl-1 = <>;
-		};
-
-		wsa_spkr_sd2: msm_cdc_pinctrlr {
-			pinctrl-names = "aud_active", "aud_sleep";
-			pinctrl-0 = <>;
-			pinctrl-1 = <>;
-		};
-	};
-
-	tavil_codec {
-		wsa_spkr_wcd_sd1: msm_cdc_pinctrll {
-			pinctrl-names = "aud_active", "aud_sleep";
-			pinctrl-0 = <>;
-			pinctrl-1 = <>;
-		};
-
-		wsa_spkr_wcd_sd2: msm_cdc_pinctrlr {
-			pinctrl-names = "aud_active", "aud_sleep";
-			pinctrl-0 = <>;
-			pinctrl-1 = <>;
-		};
-	};
-};
-
 &soc {
-	i2c_9: i2c@c1b7000 { /* BLSP2 QUP3 */
-		status = "ok";
-		pinctrl-names = "i2c_active", "i2c_sleep";
-		pinctrl-0 = <&msm8998_gpio51_active &msm8998_gpio52_active>;
-		pinctrl-1 = <&msm8998_gpio51_sleep &msm8998_gpio52_sleep>;
-	};
-
 	spi_1: spi@c175000 { /* BLSP1 QUP1 */
 		status = "ok";
 	};
@@ -71,17 +33,6 @@
 		status = "ok";
 	};
 
-	wcd9xxx_intc: wcd9xxx-irq {
-		pinctrl-names = "default";
-		pinctrl-0 = <&msm8998_gpio54_default>;
-	};
-
-	wcd_rst_gpio: msm_cdc_pinctrl@64 {
-		pinctrl-names = "aud_active", "aud_sleep";
-		pinctrl-0 = <&msm8998_gpio64_active>;
-		pinctrl-1 = <&msm8998_gpio64_sleep>;
-	};
-
 	pcie0: qcom,pcie@01c00000 {
 		pinctrl-names = "default";
 		pinctrl-0 = <>;
@@ -91,35 +42,5 @@
 	cti2: cti@6012000 {
 		pinctrl-names = "cti-trigout-pctrl";
 		pinctrl-0 = <>;
-	};
-
-	wcd_us_euro_gpio: msm_cdc_pinctrl@75 {
-		pinctrl-names = "aud_active", "aud_sleep";
-		pinctrl-0 = <>;
-		pinctrl-1 = <>;
-	};
-
-	ear_switch_en_gpio: msm_cdc_pinctrl@35 {
-		compatible = "qcom,msm-cdc-pinctrl";
-		pinctrl-names = "aud_active", "aud_sleep";
-		pinctrl-0 = <&ear_switch_en1_active>;
-		pinctrl-1 = <&ear_switch_en1_idle>;
-	};
-
-	ear_switch_in_gpio: msm_cdc_pinctrl@66 {
-		compatible = "qcom,msm-cdc-pinctrl";
-		pinctrl-names = "aud_active", "aud_sleep";
-		pinctrl-0 = <&ear_switch_in1_active>;
-		pinctrl-1 = <&ear_switch_in1_idle>;
-	};
-
-	qcom,msm-dai-mi2s {
-		dai_mi2s3: qcom,msm-dai-q6-mi2s-quat {
-			qcom,msm-mi2s-rx-lines = <1>;
-			qcom,msm-mi2s-tx-lines = <2>;
-			pinctrl-names = "default", "sleep";
-			pinctrl-0 = <&msm8998_gpio58_active &msm8998_gpio59_active &msm8998_gpio60_active &msm8998_gpio61_active>;
-			pinctrl-1 = <&msm8998_gpio58_sleep &msm8998_gpio59_sleep &msm8998_gpio60_sleep &msm8998_gpio61_sleep>;
-		};
 	};
 };
