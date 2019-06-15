@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,13 +10,12 @@
  * GNU General Public License for more details.
  */
 
-#include "pinctrl-msm8998.dtsi"
-#include "platform-msm8998.dtsi"
-#include "thermal.dtsi"
-#include "power.dtsi"
-#include "memmap.dtsi"
-#include "touch.dtsi"
-#include "audio.dtsi"
-#include "rgb.dtsi"
-#include "usb-redriver.dtsi"
-#include "sd.dtsi"
+&spmi_bus {
+	qcom,pm8998@0 {
+		qcom,power-on@800 {
+			qcom,pon_2 {
+				linux,code = <115>;
+			};
+		};
+	};
+};
