@@ -1,0 +1,96 @@
+/*
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "msm8998-wsa881x-rcl.dtsi"
+
+&spi_10 {
+	status = "disabled";
+};
+
+&soc {
+	snd_9335: sound-9335 {
+		qcom,audio-routing =
+			"AIF4 VI", "MCLK",
+			"RX_BIAS", "MCLK",
+			"MADINPUT", "MCLK",
+			"DMIC0", "MIC BIAS1",
+			"MIC BIAS1", "Digital Mic1",
+			"DMIC3", "MIC BIAS3",
+			"MIC BIAS3", "Digital Mic2",
+			"EAR Switch", "EAR";
+
+		/delete-property/ qcom,us-euro-gpios;
+		/delete-property/ qcom,hph-en0-gpio;
+		/delete-property/ qcom,hph-en1-gpio;
+
+		qcom,wsa-max-devs = <0>;
+
+		/delete-property/ qcom,wsa-devs;
+		/delete-property/ qcom,wsa-aux-dev-prefix;
+
+		fih,ear-switch-en-gpio = <&ear_switch_en_gpio>;
+		fih,ear-switch-in-gpio = <&ear_switch_in_gpio>;
+
+		hph_en0_gpio: msm_cdc_pinctrl@67 {
+			status = "disabled";
+		};
+
+		hph_en1_gpio: msm_cdc_pinctrl@68 {
+			status = "disabled";
+		};
+	};
+
+	snd_934x: sound-tavil {
+		status = "disabled";
+	};
+
+	wcd_us_euro_gpio: msm_cdc_pinctrl@75 {
+		status = "disabled";
+	};
+
+	wcd_usbc_analog_en1_gpio: msm_cdc_pinctrl@59 {
+		status = "disabled";
+	};
+
+	wcd_usbc_analog_en2n_gpio: msm_cdc_pinctrl@60 {
+		status = "disabled";
+	};
+
+	ear_switch_en_gpio: msm_cdc_pinctrl@35 {
+		compatible = "qcom,msm-cdc-pinctrl";
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&ear_switch_en1_active>;
+		pinctrl-1 = <&ear_switch_en1_idle>;
+	};
+
+	ear_switch_in_gpio: msm_cdc_pinctrl@66 {
+		compatible = "qcom,msm-cdc-pinctrl";
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&ear_switch_in1_active>;
+		pinctrl-1 = <&ear_switch_in1_idle>;
+	};
+
+	qcom,msm-dai-mi2s {
+		dai_mi2s3: qcom,msm-dai-q6-mi2s-quat {
+			pinctrl-names = "default", "sleep";
+			pinctrl-0 = <&quat_aux_pcm_active &quat_aux_pcm_din_active &quat_aux_pcm_dout_active>;
+			pinctrl-1 = <&quat_aux_pcm_sleep &quat_aux_pcm_din_sleep &quat_aux_pcm_dout_sleep>;
+		};
+	};
+};
+
+&slim_aud {
+	wcd934x_cdc: tavil_codec {
+		status = "disabled";
+	};
+};

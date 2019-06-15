@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,18 +10,14 @@
  * GNU General Public License for more details.
  */
 
-&soc {
-	tlmm: pinctrl@03400000 {
-		sdc2_cd_on: sdc2_cd_on {
-			config {
-				bias-disable;           /* no pull */
-			};
+&slim_aud {
+	tasha_codec {
+		wsa_spkr_sd1: msm_cdc_pinctrll {
+			status = "disabled";
 		};
 
-		sdc2_cd_off: sdc2_cd_off {
-			config {
-				bias-disable;           /* no pull */
-			};
+		wsa_spkr_sd2: msm_cdc_pinctrlr {
+			status = "disabled";
 		};
 	};
 };

@@ -12,6 +12,134 @@
 
 &soc {
 	tlmm: pinctrl@03400000 {
+		/* Audio */
+		i2c_9 {
+			i2c_9_sleep: i2c_9_sleep {
+				config {
+					/delete-property/ bias-pull-up;
+					bias-disable;
+				};
+			};
+
+			i2c_9_bitbang: i2c_9_bitbang {
+				config {
+					/delete-property/ bias-pull-up;
+					bias-disable;
+				};
+			};
+		};
+
+		wcd9xxx_intr {
+			wcd_intr_default: wcd_intr_default {
+				config {
+					/delete-property/ bias-pull-down;
+					bias-disable;
+				};
+			};
+		};
+
+		cdc_reset_ctrl {
+			cdc_reset_sleep: cdc_reset_sleep {
+				config {
+					drive-strength = <2>;
+				};
+			};
+
+			cdc_reset_active: cdc_reset_active {
+				config {
+					drive-strength = <2>;
+					/delete-property/ bias-pull-down;
+					bias-disable;
+				};
+			};
+		};
+
+		ear_switch_en1_idle: ear_switch_en1_idle {
+			mux {
+				pins = "gpio35";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio35";
+				drive-strength = <2>;
+				bias-pull-down;
+				output-low;
+			};
+		};
+
+		ear_switch_en1_active: ear_switch_en1_active {
+			mux {
+				pins = "gpio35";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio35";
+				drive-strength = <2>;
+				bias-disable;
+				output-high;
+			};
+		};
+
+		ear_switch_in1_idle: ear_switch_in1_idle {
+			mux {
+				pins = "gpio66";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio66";
+				drive-strength = <2>;
+				bias-pull-down;
+				output-low;
+			};
+		};
+
+		ear_switch_in1_active: ear_switch_in1_active {
+			mux {
+				pins = "gpio66";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio66";
+				drive-strength = <2>;
+				bias-disable;
+				output-high;
+			};
+		};
+
+		quat_aux_pcm {
+			quat_aux_pcm_sleep: quat_aux_pcm_sleep {
+				config {
+					/delete-property/ input-enable;
+				};
+			};
+		};
+
+		quat_aux_pcm_din {
+			quat_aux_pcm_din_sleep: quat_aux_pcm_din_sleep {
+				config {
+					/delete-property/ input-enable;
+				};
+			};
+		};
+
+		quat_aux_pcm_dout {
+			quat_aux_pcm_dout_sleep: quat_aux_pcm_dout_sleep {
+				config {
+					/delete-property/ input-enable;
+				};
+			};
+
+			quat_aux_pcm_dout_active: quat_aux_pcm_dout_active {
+				config {
+					input-enable;
+				};
+			};
+		};
+
 		/* Bluetooth */
 		blsp1_uart3: blsp1_uart3 {
 			blsp1_uart3_rxcts_sleep: blsp1_uart3_rxcts_sleep {
