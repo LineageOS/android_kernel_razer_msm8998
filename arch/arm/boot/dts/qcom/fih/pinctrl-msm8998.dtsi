@@ -148,33 +148,6 @@
 			};
 		};
 
-		/* gpio 12 */ /* NFC_ENABLE */
-		msm8998_gpio12_active: msm8998_gpio12_active {
-			mux {
-				pins = "gpio12";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio12";
-				drive-strength = <6>;
-				bias-pull-up;
-			};
-		};
-
-		msm8998_gpio12_suspend: msm8998_gpio12_suspend {
-			mux {
-				pins = "gpio12";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio12";
-				drive-strength = <6>;
-				bias-disable;
-			};
-		};
-
 		/* gpio 17 */ /* CCI_I2C_SDA0 */
 		msm8998_gpio17_active: msm8998_gpio17_active {
 			mux {
@@ -443,60 +416,6 @@
 				drive-strength = <2>;
 				bias-disable;
 				output-high;
-			};
-		};
-
-		/* gpio 43 */ /* NFC_I2C_SDA */
-		msm8998_gpio43_active: msm8998_gpio43_active {
-			mux {
-				pins = "gpio43";
-				function = "blsp_i2c6";
-			};
-
-			config {
-				pins = "gpio43";
-				drive-strength = <2>;
-				bias-disable;
-			};
-		};
-
-		msm8998_gpio43_sleep: msm8998_gpio43_sleep {
-			mux {
-				pins = "gpio43";
-				function = "blsp_i2c6";
-			};
-
-			config {
-				pins = "gpio43";
-				drive-strength = <2>;
-				bias-pull-up;
-			};
-		};
-
-		/* gpio 44 */ /* NFC_I2C_CLK */
-		msm8998_gpio44_active: msm8998_gpio44_active {
-			mux {
-				pins = "gpio44";
-				function = "blsp_i2c6";
-			};
-
-			config {
-				pins = "gpio44";
-				drive-strength = <2>;
-				bias-disable;
-			};
-		};
-
-		msm8998_gpio44_sleep: msm8998_gpio44_sleep {
-			mux {
-				pins = "gpio44";
-				function = "blsp_i2c6";
-			};
-
-			config {
-				pins = "gpio44";
-				drive-strength = <2>;
-				bias-pull-up;
 			};
 		};
 
@@ -1080,60 +999,6 @@
 
 			config {
 				pins = "gpio88";
-				drive-strength = <6>;
-				bias-disable;
-			};
-		};
-
-		/* gpio 92 */ /* NFC_INT_IRQ */
-		msm8998_gpio92_active: msm8998_gpio92_active {
-			mux {
-				pins = "gpio92";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio92";
-				drive-strength = <6>;
-				bias-pull-up;
-			};
-		};
-
-		msm8998_gpio92_suspend: msm8998_gpio92_suspend {
-			mux {
-				pins = "gpio92";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio92";
-				drive-strength = <6>;
-				bias-pull-up;
-			};
-		};
-
-		/* gpio 116 */ /* NFC_ESE_PWR_REQ */
-		msm8998_gpio116_active: msm8998_gpio116_active {
-			mux {
-				pins = "gpio116";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio116";
-				drive-strength = <6>;
-				bias-pull-up;
-			};
-		};
-
-		msm8998_gpio116_suspend: msm8998_gpio116_suspend {
-			mux {
-				pins = "gpio116";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio116";
 				drive-strength = <6>;
 				bias-disable;
 			};

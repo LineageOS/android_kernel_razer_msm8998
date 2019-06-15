@@ -23,5 +23,4 @@
 #include "vibrator.dtsi"
 #include "usb-redriver.dtsi"
 #include "fingerprint.dtsi"
-#include "nfc.dtsi"
 #include "sd.dtsi"
