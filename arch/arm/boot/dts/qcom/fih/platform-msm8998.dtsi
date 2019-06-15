@@ -73,12 +73,6 @@
 		pinctrl-1 = <&msm8998_gpio32_sleep &msm8998_gpio33_sleep>;
 	};
 
-	i2c_5: i2c@c179000 { /* BLSP1 QUP5 */
-		pinctrl-names = "i2c_active", "i2c_sleep";
-		pinctrl-0 = <&msm8998_gpio87_active &msm8998_gpio88_active>;
-		pinctrl-1 = <&msm8998_gpio87_sleep &msm8998_gpio88_sleep>;
-	};
-
 	i2c_7: i2c@c1b5000 { /* BLSP2 QUP1 */
 		pinctrl-names = "i2c_active", "i2c_sleep";
 		pinctrl-0 = <&msm8998_gpio55_active &msm8998_gpio56_active>;
