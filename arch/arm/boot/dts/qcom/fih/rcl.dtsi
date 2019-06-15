@@ -20,7 +20,6 @@
 #include "audio.dtsi"
 #include "rgb.dtsi"
 #include "keypad.dtsi"
-#include "vibrator.dtsi"
 #include "usb-redriver.dtsi"
 #include "fingerprint.dtsi"
 #include "sd.dtsi"

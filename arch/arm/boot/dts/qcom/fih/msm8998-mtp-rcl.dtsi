@@ -325,6 +325,11 @@
 
 &pmi8998_haptics {
 	status = "okay";
+	qcom,vmax-mv = <2000>;
+	qcom,ilim-ma = <300>;
+	qcom,lra-auto-res-mode = "none";
+	/delete-property/ qcom,lra-high-z;
+	/delete-property/ qcom,lra-res-cal-period;
 };
 
 &pm8998_vadc {
