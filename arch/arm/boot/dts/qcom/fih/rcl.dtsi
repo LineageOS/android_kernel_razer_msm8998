@@ -14,7 +14,6 @@
 #include "platform-msm8998.dtsi"
 #include "thermal.dtsi"
 #include "power.dtsi"
-#include "memmap.dtsi"
 #include "touch.dtsi"
 #include "audio.dtsi"
 #include "rgb.dtsi"
