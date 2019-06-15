@@ -12,6 +12,23 @@
 
 &soc {
 	tlmm: pinctrl@03400000 {
+		/* Bluetooth */
+		blsp1_uart3: blsp1_uart3 {
+			blsp1_uart3_rxcts_sleep: blsp1_uart3_rxcts_sleep {
+				config {
+					/delete-property/ bias-no-pull;
+					bias-pull-up;
+				};
+			};
+
+			blsp1_uart3_rfr_sleep: blsp1_uart3_rfr_sleep {
+				config {
+					/delete-property/ bias-no-pull;
+					bias-pull-up;
+				};
+			};
+		};
+
 		/* Camera */
 		cci0_suspend: cci0_suspend {
 			config {

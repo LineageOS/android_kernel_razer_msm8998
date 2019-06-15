@@ -21,13 +21,6 @@
 	};
 };
 
-&blsp1_uart3_hs {
-	status = "ok";
-	pinctrl-names = "sleep", "default";
-	pinctrl-0 = <&msm8998_gpio45_sleep &msm8998_gpio46_sleep &msm8998_gpio47_sleep &msm8998_gpio48_sleep>;
-	pinctrl-1 = <&msm8998_gpio45_active &msm8998_gpio46_active &msm8998_gpio47_active &msm8998_gpio48_active>;
-};
-
 &slim_aud {
 	tasha_codec {
 		wsa_spkr_sd1: msm_cdc_pinctrll {
