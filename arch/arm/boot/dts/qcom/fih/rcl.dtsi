@@ -14,6 +14,5 @@
 #include "platform-msm8998.dtsi"
 #include "thermal.dtsi"
 #include "power.dtsi"
-#include "rgb.dtsi"
 #include "usb-redriver.dtsi"
 #include "sd.dtsi"
