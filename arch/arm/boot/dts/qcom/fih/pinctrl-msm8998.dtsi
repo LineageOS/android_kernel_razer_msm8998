@@ -229,34 +229,6 @@
 			};
 		};
 
-		/* gpio 37 */ /* KS_BRI_PCIE_WAKE_N */
-		msm8998_gpio37_default: msm8998_gpio37_default {
-			mux {
-				pins = "gpio37";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio37";
-				drive-strength = <2>;
-				bias-disable;
-			};
-		};
-
-		msm8998_gpio37_active: msm8998_gpio37_active {
-			mux {
-				pins = "gpio37";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio37";
-				drive-strength = <2>;
-				bias-disable;
-				output-high;
-			};
-		};
-
 		/* gpio 45 */ /* BT_HCI_UART_TXD */
 		msm8998_gpio45_active: msm8998_gpio45_active {
 			mux {
@@ -839,21 +811,6 @@
 				pins = "gpio88";
 				drive-strength = <6>;
 				bias-disable;
-			};
-		};
-
-		/* gpio 121 */ /* FP_INT_N */
-		msm8998_gpio121_default: msm8998_gpio121_default {
-			mux {
-				pins = "gpio121";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio121";
-				drive-strength = <2>;
-				bias-disable;
-				input-enable;
 			};
 		};
 
