@@ -13,20 +13,12 @@
 
 / {
 	aliases {
-		i2c2 = &i2c_2;
 		i2c5 = &i2c_5;
-		i2c7 = &i2c_7;
 		i2c8 = &i2c_8;
 		i2c9 = &i2c_9;
 		spi1 = &spi_1;
 		spi12 = &spi_12;
 	};
-};
-
-&uartblsp2dm1 {
-		status = "ok";
-		pinctrl-names = "default";
-		pinctrl-0 = <&msm8998_gpio4_active &msm8998_gpio5_active>;
 };
 
 &blsp1_uart3_hs {
@@ -67,18 +59,6 @@
 };
 
 &soc {
-	i2c_2: i2c@c176000 { /* BLSP1 QUP2 */
-		pinctrl-names = "i2c_active", "i2c_sleep";
-		pinctrl-0 = <&msm8998_gpio32_active &msm8998_gpio33_active>;
-		pinctrl-1 = <&msm8998_gpio32_sleep &msm8998_gpio33_sleep>;
-	};
-
-	i2c_7: i2c@c1b5000 { /* BLSP2 QUP1 */
-		pinctrl-names = "i2c_active", "i2c_sleep";
-		pinctrl-0 = <&msm8998_gpio55_active &msm8998_gpio56_active>;
-		pinctrl-1 = <&msm8998_gpio55_sleep &msm8998_gpio56_sleep>;
-	};
-
 	i2c_9: i2c@c1b7000 { /* BLSP2 QUP3 */
 		status = "ok";
 		pinctrl-names = "i2c_active", "i2c_sleep";
@@ -88,9 +68,6 @@
 
 	spi_1: spi@c175000 { /* BLSP1 QUP1 */
 		status = "ok";
-		pinctrl-names = "spi_default", "spi_sleep";
-		pinctrl-0 = <&msm8998_gpio0_active &msm8998_gpio1_active &msm8998_gpio2_active &msm8998_gpio3_active>;
-		pinctrl-1 = <&msm8998_gpio0_sleep &msm8998_gpio1_sleep &msm8998_gpio2_sleep &msm8998_gpio3_sleep>;
 	};
 
 	spi_5: spi@c179000 { /* BLSP1 QUP5 */
@@ -99,9 +76,6 @@
 
 	spi_12: spi@c1ba000 { /* BLSP2 QUP6 */
 		status = "ok";
-		pinctrl-names = "spi_default", "spi_sleep";
-		pinctrl-0 = <&msm8998_gpio81_active &msm8998_gpio82_active &msm8998_gpio83_active &msm8998_gpio84_active>;
-		pinctrl-1 = <&msm8998_gpio81_sleep &msm8998_gpio82_sleep &msm8998_gpio83_sleep &msm8998_gpio84_sleep>;
 	};
 
 	wcd9xxx_intc: wcd9xxx-irq {
@@ -154,11 +128,5 @@
 			pinctrl-0 = <&msm8998_gpio58_active &msm8998_gpio59_active &msm8998_gpio60_active &msm8998_gpio61_active>;
 			pinctrl-1 = <&msm8998_gpio58_sleep &msm8998_gpio59_sleep &msm8998_gpio60_sleep &msm8998_gpio61_sleep>;
 		};
-	};
-
-	clock_audio: audio_ext_clk {
-		pinctrl-names = "sleep", "active";
-		pinctrl-0 = <&msm8998_gpio69_sleep>;
-		pinctrl-1 = <&msm8998_gpio69_active>;
 	};
 };
