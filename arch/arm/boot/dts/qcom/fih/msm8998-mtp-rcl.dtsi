@@ -17,6 +17,22 @@
 #include "msm8998-pinctrl-rcl.dtsi"
 #include "msm8998-regulator-rcl.dtsi"
 
+/ {
+	reserved-memory {
+		fih_mem: fih_region@a0000000 { /* for FIH feature */
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0xa0000000 0 0xb00000>;
+		};
+
+		ramoops_mem: ramoops_region@a0b00000 { /* for ramoops feature */
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0xa0b00000 0 0x200000>;
+		};
+	};
+};
+
 &vendor {
 	bluetooth: bt_wcn3990 {
 		compatible = "qca,wcn3990";
@@ -414,6 +430,15 @@
 };
 
 &soc {
+	ramoops@a0b00000 {
+		compatible = "ramoops";
+		memory-region = <&ramoops_mem>;
+		record-size = <0 0x0001000>;
+		console-size = <0 0x00040000>;
+		ftrace-size = <0 0x00040000>;
+		pmsg-size = <0 0x00040000>;
+	};
+
 	gpio_keys {
 		compatible = "gpio-keys";
 		input-name = "gpio-keys";
