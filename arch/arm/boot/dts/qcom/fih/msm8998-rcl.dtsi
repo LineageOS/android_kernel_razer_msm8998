@@ -26,6 +26,13 @@
 		qcom,therm-reset-temp = <104>;
 	};
 
+	qcom,pcie@01c00000 {
+		/delete-property/ pinctrl-names;
+		/delete-property/ pinctrl-0;
+		/delete-property/ pinctrl-1;
+		/delete-property/ wake-gpio;
+	};
+
 	qcom,bcl {
 		qcom,ibat-monitor {
 			qcom,mitigation-freq-khz = <979200>;
