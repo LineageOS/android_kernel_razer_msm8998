@@ -553,13 +553,32 @@
 
 &vendor {
 	mtp_batterydata: qcom,battery-data {
-		qcom,batt-id-range-pct = <15>;
-		#include "../fg-gen3-batterydata-itech-3000mah.dtsi"
-		#include "../fg-gen3-batterydata-ascent-3450mah.dtsi"
-		#include "../fg-gen3-batterydata-demo-6000mah.dtsi"
+		#include "batterydata-RCL-4000mah-240k.dtsi"
 	};
 };
 
 &pmi8998_fg {
 	qcom,battery-data = <&mtp_batterydata>;
+	qcom,fg-cutoff-voltage = <3300>;
+	qcom,fg-empty-voltage = <3000>;
+	qcom,fg-chg-term-current = <80>; /* 0.02C */
+	qcom,fg-sys-term-current = <(-250)>; /* Actually battery will reach to 100% when charging current ~= -150 mA */
+	qcom,fg-auto-recharge-soc;
+	qcom,fg-recharge-soc-thr = <99>;
+	qcom,hold-soc-while-full;
+	qcom,battery-thermal-coefficients = [CC 50 FF];
+	qcom,fg-jeita-hyst-temp;
+	qcom,fg-jeita-thresholds = <0 15 45 55>;
+};
+
+&pmi8998_charger {
+	qcom,usb-icl-ua = <3000000>;
+	qcom,fcc-max-ua = <3900000>;
+	qcom,fv-max-uv = <4400000>;
+	qcom,jeita-fcc-comp = <0>;
+	qcom,jeita-fv-comp = <300000>;
+	qcom,step-charging-enable;
+	qcom,sw-jeita-enable;
+	qcom,auto-recharge-soc;
+	fih,chg-abnormal-check-en;
 };
