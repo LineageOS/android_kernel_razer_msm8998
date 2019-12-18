@@ -892,6 +892,10 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 {
 	int rc = 0;
 	bool override;
+#ifdef CONFIG_MACH_RCL
+	bool legacy_cable = (bool)(chg->typec_status[4] &
+			TYPEC_LEGACY_CABLE_STATUS_BIT);
+#endif
 
 	/* suspend and return if 25mA or less is requested */
 	if (icl_ua < USBIN_25MA)
@@ -901,8 +905,14 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 		goto override_suspend_config;
 
 	/* configure current */
+#ifdef CONFIG_MACH_RCL
+	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB &&
+		(legacy_cable ||
+		 chg->typec_mode == POWER_SUPPLY_TYPEC_SOURCE_DEFAULT)) {
+#else
 	if (chg->typec_mode == POWER_SUPPLY_TYPEC_SOURCE_DEFAULT
 		&& (chg->real_charger_type == POWER_SUPPLY_TYPE_USB)) {
+#endif
 		rc = set_sdp_current(chg, icl_ua);
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't set SDP ICL rc=%d\n", rc);
@@ -2419,6 +2429,7 @@ void FIH_chg_abnormal_check(struct smb_charger *chg)
 	u8 jeita_status = 0;
 	bool jeita_hit = false;
 	int rc = 0;
+	bool legacy_cable = false;
 
 	if (chg->fih_chg_abnormal_check_en == false)
 		return;
@@ -2430,6 +2441,11 @@ void FIH_chg_abnormal_check(struct smb_charger *chg)
 		return;
 	}
 	if (prop.intval == 0)
+		return;
+
+	legacy_cable = (bool)(chg->typec_status[4] &
+			TYPEC_LEGACY_CABLE_STATUS_BIT);
+	if (legacy_cable)
 		return;
 
 	prop.intval = 0;
@@ -2806,11 +2822,15 @@ int smblib_set_prop_sdp_current_max(struct smb_charger *chg,
 	int typec_mode = 0;
 	bool legacy_cable = 0;
 	union power_supply_propval final_val = {0, };
+	const bool is_float_charger = chg->real_charger_type == POWER_SUPPLY_TYPE_USB_FLOAT;
 #endif
 
 	if (!chg->pd_active) {
 		rc = smblib_handle_usb_current(chg, val->intval);
 #ifdef CONFIG_MACH_RCL
+		if (rc < 0 || is_float_charger)
+			return rc;
+
 		final_val.intval = val->intval;
 		typec_mode = smblib_get_prop_ufp_mode(chg);
 		legacy_cable = (bool)(chg->typec_status[4] &
@@ -2830,17 +2850,24 @@ int smblib_set_prop_sdp_current_max(struct smb_charger *chg,
 		} else {
 			/*
 			 * It's a C to A cable,
-			 * we only allow the ICL to 900 mA
+			 * we only allow the ICL to 500mA or 900mA
+			 * based on typeC mode
 			 */
 			if (typec_mode ==
 			    POWER_SUPPLY_TYPEC_SOURCE_MEDIUM ||
 			    typec_mode ==
 			    POWER_SUPPLY_TYPEC_SOURCE_HIGH)
 				final_val.intval = 900000;
+
+			if (typec_mode ==
+			    POWER_SUPPLY_TYPEC_SOURCE_DEFAULT &&
+			    val->intval < 500000)
+				final_val.intval = 500000;
 		}
 
-		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
-				true, final_val.intval);
+		if (final_val.intval != val->intval)
+			rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
+					true, final_val.intval);
 #endif
 	} else if (chg->system_suspend_supported) {
 		if (val->intval <= USBIN_25MA)
