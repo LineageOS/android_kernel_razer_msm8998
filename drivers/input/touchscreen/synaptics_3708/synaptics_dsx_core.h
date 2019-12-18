@@ -41,6 +41,7 @@
 #define SYNAPTICS_DSX_DRIVER_VERSION 0x2069
 
 #include <linux/version.h>
+#include <linux/pm_qos.h>
 
 #ifdef CONFIG_FB
 #include <linux/notifier.h>
@@ -419,6 +420,7 @@ struct synaptics_rmi4_data
     bool stylus_enable;
     bool eraser_enable;
     bool external_afe_buttons;
+    struct pm_qos_request pm_qos_req;
     int (*reset_device)(struct synaptics_rmi4_data *rmi4_data,
                         bool rebuild);
     int (*irq_enable)(struct synaptics_rmi4_data *rmi4_data, bool enable,
