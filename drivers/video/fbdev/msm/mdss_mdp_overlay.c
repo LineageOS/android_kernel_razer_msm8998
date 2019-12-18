@@ -3600,8 +3600,19 @@ static ssize_t dynamic_fps_sysfs_wta_dfps(struct device *dev,
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 	struct dynamic_fps_data data = {0};
 
+#ifdef CONFIG_MACH_RCL
+	if (!mdp5_data->ctl) {
+		/*
+		 * Note: this just updates the fps state. The dsi panel
+		 * driver will check if the panel is actually off and
+		 * skip sending the dtsi fps commands if it is. If the
+		 * panel is off, then the dtsi fps commands will be
+		 * sent when the panel turns on.
+		 */
+#else
 	if (!mdp5_data->ctl || !mdss_mdp_ctl_is_power_on(mdp5_data->ctl) ||
 			mdss_panel_is_power_off(mfd->panel_power_state)) {
+#endif
 		pr_debug("panel is off\n");
 		return count;
 	}
@@ -3667,202 +3678,11 @@ static ssize_t dynamic_fps_sysfs_wta_dfps(struct device *dev,
 	return count;
 } /* dynamic_fps_sysfs_wta_dfps */
 
-
-#ifdef CONFIG_MACH_RCL
-static ssize_t dynamic_fps_min_sysfs_rda_dfps(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	ssize_t ret;
-	struct mdss_panel_data *pdata;
-	struct fb_info *fbi = dev_get_drvdata(dev);
-	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
-	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
-
-	if (!mdp5_data->ctl || !mdss_mdp_ctl_is_power_on(mdp5_data->ctl))
-		return 0;
-
-	pdata = dev_get_platdata(&mfd->pdev->dev);
-	if (!pdata) {
-		pr_err("no panel connected for fb%d\n", mfd->index);
-		return -ENODEV;
-	}
-
-	mutex_lock(&mdp5_data->dfps_lock);
-	ret = snprintf(buf, PAGE_SIZE, "%d\n",
-		       pdata->panel_info.min_fps);
-	pr_debug("%s: '%d'\n", __func__,
-		pdata->panel_info.min_fps);
-	mutex_unlock(&mdp5_data->dfps_lock);
-
-	return ret;
-} /* dynamic_fps_min_sysfs_rda_dfps */
-
-static ssize_t dynamic_fps_min_sysfs_wta_dfps(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
-{
-	int panel_min_fps, panel_max_fps, rc = 0;
-	struct mdss_panel_data *pdata;
-	struct fb_info *fbi = dev_get_drvdata(dev);
-	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
-	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
-	struct dynamic_fps_data data = {0};
-
-	if (!mdp5_data->ctl || !mdss_mdp_ctl_is_power_on(mdp5_data->ctl) ||
-			mdss_panel_is_power_off(mfd->panel_power_state)) {
-		pr_debug("panel is off\n");
-		return count;
-	}
-
-	pdata = dev_get_platdata(&mfd->pdev->dev);
-	if (!pdata) {
-		pr_err("no panel connected for fb%d\n", mfd->index);
-		return -ENODEV;
-	}
-
-	if (!pdata->panel_info.dynamic_fps) {
-		pr_err_once("%s: Dynamic fps not enabled for this panel\n",
-				__func__);
-		return -EINVAL;
-	}
-
-	if (pdata->panel_info.type != MIPI_VIDEO_PANEL &&
-			pdata->panel_info.type != MIPI_CMD_PANEL) {
-		return -EINVAL;
-	}
-
-	if (pdata->panel_info.dfps_update ==
-		DFPS_IMMEDIATE_MULTI_UPDATE_MODE_CLK_HFP ||
-		pdata->panel_info.dfps_update ==
-		DFPS_IMMEDIATE_MULTI_MODE_HFP_CALC_CLK) {
-		pr_err("DFPS update mode not support for min fps\n");
-	} else {
-		rc = kstrtoint(buf, 10, &data.fps);
-		if (rc) {
-			pr_err("%s: kstrtoint failed. rc=%d\n", __func__, rc);
-			return rc;
-		}
-	}
-
-	panel_min_fps = mdss_panel_get_min_framerate(&pdata->panel_info);
-	if (data.fps == panel_min_fps) {
-		pr_debug("%s: Min FPS is already %d\n",
-			__func__, data.fps);
-		return count;
-	}
-
-	if (data.fps > DFPS_DATA_MAX_FPS || data.fps <= 0) {
-		pr_err("Data values out of bound.\n");
-		return -EINVAL;
-	}
-
-	panel_max_fps = mdss_panel_get_max_framerate(&pdata->panel_info);
-	if (data.fps > panel_max_fps) {
-		pr_info("%s: capping min fps to max fps at %d\n", __func__, panel_max_fps);
-		data.fps = panel_max_fps;
-	}
-
-	mutex_lock(&mdp5_data->dfps_lock);
-
-	pdata->panel_info.min_fps = data.fps;
-	if (pdata->next) {
-		pdata->next->panel_info.min_fps = data.fps;
-	}
-
-	mutex_unlock(&mdp5_data->dfps_lock);
-
-	return count;
-} /* dynamic_fps_min_sysfs_wta_dfps */
-
-static ssize_t dynamic_fps_max_sysfs_rda_dfps(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	ssize_t ret;
-	struct mdss_panel_data *pdata;
-	struct fb_info *fbi = dev_get_drvdata(dev);
-	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
-	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
-
-	if (!mdp5_data->ctl || !mdss_mdp_ctl_is_power_on(mdp5_data->ctl))
-		return 0;
-
-	pdata = dev_get_platdata(&mfd->pdev->dev);
-	if (!pdata) {
-		pr_err("no panel connected for fb%d\n", mfd->index);
-		return -ENODEV;
-	}
-
-	mutex_lock(&mdp5_data->dfps_lock);
-	ret = snprintf(buf, PAGE_SIZE, "%d\n",
-		       pdata->panel_info.max_fps);
-	pr_debug("%s: '%d'\n", __func__,
-		pdata->panel_info.max_fps);
-	mutex_unlock(&mdp5_data->dfps_lock);
-
-	return ret;
-} /* dynamic_fps_max_sysfs_rda_dfps */
-
-static ssize_t dynamic_fps_max_sysfs_wta_dfps(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
-{
-	int rc = 0;
-	struct mdss_panel_data *pdata;
-	struct fb_info *fbi = dev_get_drvdata(dev);
-	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
-	struct dynamic_fps_data data = {0};
-
-	pdata = dev_get_platdata(&mfd->pdev->dev);
-	if (!pdata) {
-		pr_err("no panel connected for fb%d\n", mfd->index);
-		return -ENODEV;
-	}
-
-	if (!pdata->panel_info.dynamic_fps) {
-		pr_err_once("Dynamic fps not enabled for this panel\n");
-		return -EINVAL;
-	}
-
-	if (pdata->panel_info.dfps_update == DFPS_IMMEDIATE_MULTI_UPDATE_MODE_CLK_HFP ||
-			pdata->panel_info.dfps_update == DFPS_IMMEDIATE_MULTI_MODE_HFP_CALC_CLK) {
-		pr_err("DFPS update mode not support for max fps\n");
-	} else {
-		rc = kstrtoint(buf, 10, &data.fps);
-		if (rc) {
-			pr_err("kstrtoint failed. rc=%d\n", rc);
-			return rc;
-		}
-	}
-
-	if (data.fps <= 0) {
-		pr_err("Data values out of bound.\n");
-		return -EINVAL;
-	}
-
-	rc = mdss_fb_set_dfps_max(mfd, pdata, &data);
-	if (rc) {
-		return rc;
-	}
-
-	return count;
-} /* dynamic_fps_max_sysfs_wta_dfps */
-#endif
-
 static DEVICE_ATTR(dynamic_fps, S_IRUGO | S_IWUSR, dynamic_fps_sysfs_rda_dfps,
 	dynamic_fps_sysfs_wta_dfps);
 
-#ifdef CONFIG_MACH_RCL
-static DEVICE_ATTR(dynamic_fps_min, S_IRUGO | S_IWUSR, dynamic_fps_min_sysfs_rda_dfps,
-	dynamic_fps_min_sysfs_wta_dfps);
-
-static DEVICE_ATTR(dynamic_fps_max, S_IRUGO | S_IWUSR, dynamic_fps_max_sysfs_rda_dfps,
-	dynamic_fps_max_sysfs_wta_dfps);
-#endif
-
 static struct attribute *dynamic_fps_fs_attrs[] = {
 	&dev_attr_dynamic_fps.attr,
-#ifdef CONFIG_MACH_RCL
-	&dev_attr_dynamic_fps_min.attr,
-	&dev_attr_dynamic_fps_max.attr,
-#endif
 	NULL,
 };
 static struct attribute_group dynamic_fps_fs_attrs_group = {
