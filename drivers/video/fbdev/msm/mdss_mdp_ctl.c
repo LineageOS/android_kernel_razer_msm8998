@@ -3062,7 +3062,9 @@ static void __dsc_config(struct mdss_mdp_mixer *mixer,
 	data |= dsc->max_qp_flatness << 5;
 	data |= dsc->min_qp_flatness;
 	writel_relaxed(data, offset + MDSS_MDP_REG_DSC_FLATNESS);
+#ifndef CONFIG_MACH_RCL
 	writel_relaxed(0x983, offset + MDSS_MDP_REG_DSC_FLATNESS);
+#endif
 
 	data = dsc->rc_model_size;	/* rate_buffer_size */
 	writel_relaxed(data, offset + MDSS_MDP_REG_DSC_RC_MODEL_SIZE);

@@ -354,6 +354,19 @@ struct dsi_panel_cmds {
 	int link_state;
 };
 
+#ifdef CONFIG_MACH_RCL
+struct refresh_rate_config {
+	struct dsi_panel_cmds config_cmds;
+	u32 rate;
+	bool enabled;
+};
+
+struct input_boost_config {
+	struct dsi_panel_cmds config_cmds;
+	u32 num_idle_frames;
+};
+#endif
+
 struct dsi_panel_timing {
 	struct mdss_panel_timing timing;
 	uint32_t phy_timing[12];
@@ -364,6 +377,10 @@ struct dsi_panel_timing {
 	struct dsi_panel_cmds on_cmds;
 	struct dsi_panel_cmds post_panel_on_cmds;
 	struct dsi_panel_cmds switch_cmds;
+#ifdef CONFIG_MACH_RCL
+	struct refresh_rate_config refresh_rate_cfg;
+	struct input_boost_config input_boost_cfg;
+#endif
 };
 
 struct dsi_kickoff_action {
@@ -394,14 +411,6 @@ struct dsi_err_container {
 	u32 index;
 	s64 err_time[MAX_ERR_INDEX];
 };
-
-#ifdef CONFIG_MACH_RCL
-struct refresh_rate_config {
-	struct dsi_panel_cmds config_cmds;
-	u32 rate;
-	bool enabled;
-};
-#endif
 
 #define DSI_CTRL_LEFT		DSI_CTRL_0
 #define DSI_CTRL_RIGHT		DSI_CTRL_1
@@ -436,6 +445,7 @@ struct mdss_dsi_ctrl_pdata {
 	void (*switch_mode) (struct mdss_panel_data *pdata, int mode);
 #ifdef CONFIG_MACH_RCL
 	int (*refresh_rate_ctl) (struct mdss_panel_data *pdata, int rate);
+	int (*input_boost_ctrl)(struct mdss_panel_data *pdata, int enable);
 #endif
 	struct mdss_panel_data panel_data;
 	unsigned char *ctrl_base;
@@ -512,6 +522,13 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds lp_on_cmds;
 	struct dsi_panel_cmds lp_off_cmds;
 	struct dsi_panel_cmds status_cmds;
+#ifdef CONFIG_MACH_RCL
+	struct refresh_rate_config refresh_rate_cfg;
+	struct input_boost_config input_boost_cfg;
+
+	u32 cur_num_idle_frames;
+#endif
+
 	u32 *status_valid_params;
 	u32 *status_cmds_rlen;
 	u32 *status_value;
@@ -603,10 +620,6 @@ struct mdss_dsi_ctrl_pdata {
 	bool update_phy_timing; /* flag to recalculate PHY timings */
 
 	bool phy_power_off;
-
-#ifdef CONFIG_MACH_RCL
-	struct refresh_rate_config refresh_rate_cfg;
-#endif
 };
 
 struct dsi_status_data {
