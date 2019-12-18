@@ -119,6 +119,23 @@
 #define F12_WAKEUP_GESTURE_MODE 0x02
 #define F12_UDG_DETECT 0x0f
 
+/*
+  When wakeup gesture is enabled,
+  the synaptics_rmi4_resume_reset_device() will lock rmi4_reset_mutex then disable IRQ.
+  If there's any IRQ triggered after rmi4_reset_mutex has been locked,
+  the synaptics_rmi4_irq() will wait synaptics_rmi4_resume_reset_device() to release the mutex.
+  But it will never happen cause synaptics_rmi4_resume_reset_device() will be blocked in disable_irq()
+  which is waiting for synaptics_rmi4_irq() to finish.
+
+  Example:
+	synaptics_rmi4_resume_reset_device() -> lock rmi4_reset_mutex -> disable_irq() -> wait IRQ thread exits
+	synaptics_rmi4_irq() -> synaptics_rmi4_reinit_device() -> wait to lock rmi4_reset_mutex
+
+  RCL2 have LPWG feature implementation (that means No Power off when system suspending).
+  So we think we can ignore "synaptics_rmi4_resume_reset_device" as a workaround to avoid this problem.
+*/
+#define FIH_RESET_MUTEX_DEADLOCK_WORKAROUND
+
 static bool IsTouchPowerOn = false;
 
 static int synaptics_rmi4_check_status(struct synaptics_rmi4_data *rmi4_data,
@@ -127,7 +144,9 @@ static int synaptics_rmi4_free_fingers(struct synaptics_rmi4_data *rmi4_data);
 static int synaptics_rmi4_reinit_device(struct synaptics_rmi4_data *rmi4_data);
 static int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data,
                                        bool rebuild);
+#ifndef FIH_RESET_MUTEX_DEADLOCK_WORKAROUND
 static int synaptics_rmi4_resume_reset_device(struct synaptics_rmi4_data *rmi4_data);
+#endif
 
 
 #ifdef CONFIG_FB
@@ -1824,7 +1843,12 @@ static irqreturn_t synaptics_rmi4_irq(int irq, void *data)
     if (gpio_get_value(bdata->irq_gpio) != bdata->irq_on_state)
         goto exit;
 
+    /* prevent CPU from entering deep sleep */
+    pm_qos_update_request(&rmi4_data->pm_qos_req, 100);
+
     synaptics_rmi4_sensor_report(rmi4_data, true);
+
+    pm_qos_update_request(&rmi4_data->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 
 exit:
     return IRQ_HANDLED;
@@ -4326,6 +4350,7 @@ exit:
 }
 
 
+#ifndef FIH_RESET_MUTEX_DEADLOCK_WORKAROUND
 static int synaptics_rmi4_resume_reset_device(struct synaptics_rmi4_data *rmi4_data)
 {
     int retval;
@@ -4365,6 +4390,7 @@ exit:
     return retval;
 
 }
+#endif
 #ifdef FB_READY_RESET
 static void synaptics_rmi4_reset_work(struct work_struct *work)
 {
@@ -4596,6 +4622,9 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 
     vir_button_map = bdata->vir_button_map;
 
+    pm_qos_add_request(&rmi4_data->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
+                        PM_QOS_DEFAULT_VALUE);
+
     retval = synaptics_rmi4_get_reg(rmi4_data, true);
     if (retval < 0)
     {
@@ -4806,6 +4835,7 @@ err_enable_reg:
     synaptics_rmi4_get_reg(rmi4_data, false);
 
 err_get_reg:
+    pm_qos_remove_request(&rmi4_data->pm_qos_req);
     kfree(rmi4_data);
 
     return retval;
@@ -4861,6 +4891,8 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 #ifdef USE_EARLYSUSPEND
     unregister_early_suspend(&rmi4_data->early_suspend);
 #endif
+
+    pm_qos_remove_request(&rmi4_data->pm_qos_req);
 
     synaptics_rmi4_empty_fn_list(rmi4_data);
     input_unregister_device(rmi4_data->input_dev);
@@ -5235,7 +5267,9 @@ exit:
 
 static int synaptics_rmi4_resume(struct device *dev)
 {
+#ifndef FIH_RESET_MUTEX_DEADLOCK_WORKAROUND
     int retval;
+#endif
 
     struct synaptics_rmi4_exp_fhandler *exp_fhandler;
     struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
@@ -5249,6 +5283,7 @@ static int synaptics_rmi4_resume(struct device *dev)
     {
         synaptics_rmi4_wakeup_gesture(rmi4_data, false);
         disable_irq_wake(rmi4_data->irq);
+#ifndef FIH_RESET_MUTEX_DEADLOCK_WORKAROUND
         retval = synaptics_rmi4_resume_reset_device(rmi4_data);
         if (retval < 0)
         {
@@ -5256,6 +5291,7 @@ static int synaptics_rmi4_resume(struct device *dev)
                     "%s: Failed to issue reset command\n",
                     __func__);
         }
+#endif
         goto exit;
     }
 
