@@ -11,6 +11,7 @@
  */
 
 #include "dsi-panel-nt36830-wqhd-dualmipi-cmd.dtsi"
+#include "dsi-panel-nt36830-wqhd-dualmipi-cmd-10bit.dtsi"
 #include "dsi-panel-nt36830-wqhd-dualmipi-video.dtsi"
 
 &soc {
