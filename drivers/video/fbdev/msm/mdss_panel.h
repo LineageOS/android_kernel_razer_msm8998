@@ -277,6 +277,8 @@ struct mdss_intf_ulp_clamp {
  *			avr mode passed as argument
  *			0 - disable AVR support
  *			1 - enable AVR support
+ * @MDSS_EVENT_PANEL_INPUT_BOOST: Enable/disable panel input boost.
+ *				Argument provides enable/disable decision.
  */
 enum mdss_intf_events {
 	MDSS_EVENT_RESET = 1,
@@ -314,6 +316,9 @@ enum mdss_intf_events {
 	MDSS_EVENT_AVR_MODE,
 	MDSS_EVENT_REGISTER_CLAMP_HANDLER,
 	MDSS_EVENT_DSI_DYNAMIC_BITCLK,
+#ifdef CONFIG_MACH_RCL
+	MDSS_EVENT_PANEL_INPUT_BOOST,
+#endif
 	MDSS_EVENT_MAX,
 };
 
@@ -386,6 +391,10 @@ static inline char *mdss_panel_intf_event_to_string(int event)
 		return INTF_EVENT_STR(MDSS_EVENT_DEEP_COLOR);
 	case MDSS_EVENT_DISABLE_PANEL:
 		return INTF_EVENT_STR(MDSS_EVENT_DISABLE_PANEL);
+#ifdef CONFIG_MACH_RCL
+	case MDSS_EVENT_PANEL_INPUT_BOOST:
+		return INTF_EVENT_STR(MDSS_EVENT_PANEL_INPUT_BOOST);
+#endif
 	default:
 		return "unknown";
 	}
@@ -847,6 +856,8 @@ struct mdss_panel_info {
 	u32 min_fps;
 	u32 max_fps;
 #ifdef CONFIG_MACH_RCL
+	u32* fps_rates;
+	u32 num_fps_rates;
 	u32 avr_min_fps;
 #endif
 	u32 prg_fet;
@@ -1022,6 +1033,10 @@ struct mdss_panel_data {
 	bool panel_disable_mode;
 
 	int panel_te_gpio;
+#ifdef CONFIG_MACH_RCL
+	int te_gpio_trigger_val;
+	int te_gpio_prev_val;
+#endif
 	struct completion te_done;
 };
 
@@ -1457,6 +1472,11 @@ void mdss_panel_info_from_timing(struct mdss_panel_timing *pt,
 struct mdss_panel_timing *mdss_panel_get_timing_by_name(
 		struct mdss_panel_data *pdata,
 		const char *name);
+#ifdef CONFIG_MACH_RCL
+struct mdss_panel_timing *mdss_panel_get_timing_by_res(
+		struct mdss_panel_data *pdata,
+		u32 xres, u32 yres);
+#endif
 #else
 static inline int mdss_panel_debugfs_init(
 		struct mdss_panel_info *panel_info,
@@ -1470,5 +1490,10 @@ static inline void mdss_panel_info_from_timing(struct mdss_panel_timing *pt,
 static inline struct mdss_panel_timing *mdss_panel_get_timing_by_name(
 		struct mdss_panel_data *pdata,
 		const char *name) { return NULL; };
+#ifdef CONFIG_MACH_RCL
+static inline struct mdss_panel_timing *mdss_panel_get_timing_by_res(
+		struct mdss_panel_data *pdata,
+		u32 xres, u32 yres) { return NULL; };
+#endif
 #endif
 #endif /* MDSS_PANEL_H */

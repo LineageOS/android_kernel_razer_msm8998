@@ -1255,9 +1255,15 @@ static int mdss_fb_init_panel_modes(struct msm_fb_data_type *mfd,
 	struct fb_info *fbi = mfd->fbi;
 	struct fb_videomode *modedb;
 	struct mdss_panel_timing *pt;
+#ifdef CONFIG_MACH_RCL
+	struct mdss_panel_info *pinfo;
+#endif
 	struct list_head *pos;
 	int num_timings = 0;
 	int i = 0;
+#ifdef CONFIG_MACH_RCL
+	int num_fps_rates = 1;
+#endif
 
 	/* check if multiple modes are supported */
 	if (!pdata->timings_list.prev || !pdata->timings_list.next)
@@ -1266,8 +1272,20 @@ static int mdss_fb_init_panel_modes(struct msm_fb_data_type *mfd,
 	if (!fbi || !pdata->current_timing || list_empty(&pdata->timings_list))
 		return 0;
 
+#ifdef CONFIG_MACH_RCL
+	pinfo = &pdata->panel_info;
+	if (!pinfo)
+		return -EINVAL;
+#endif
+
 	list_for_each(pos, &pdata->timings_list)
 		num_timings++;
+#ifdef CONFIG_MACH_RCL
+	if (pinfo->num_fps_rates > 0) {
+		num_timings *= pinfo->num_fps_rates;
+		num_fps_rates = pinfo->num_fps_rates;
+	}
+#endif
 
 	modedb = devm_kzalloc(fbi->dev, num_timings * sizeof(*modedb),
 			GFP_KERNEL);
@@ -1277,6 +1295,56 @@ static int mdss_fb_init_panel_modes(struct msm_fb_data_type *mfd,
 	list_for_each_entry(pt, &pdata->timings_list, list) {
 		struct mdss_panel_timing *spt = NULL;
 
+#ifdef CONFIG_MACH_RCL
+		int orig_fps = pt->frame_rate;
+		int j;
+		for (j = 0; j < num_fps_rates; j++) {
+			pt->frame_rate = pinfo->fps_rates[j];
+
+			mdss_fb_videomode_from_panel_timing(modedb + i, pt);
+			if (pdata->next) {
+				spt = mdss_panel_get_timing_by_name(pdata->next,
+						modedb[i].name);
+				/* for split config, recalculate xres and pixel clock */
+				if (!IS_ERR_OR_NULL(spt)) {
+					unsigned long pclk, h_total, v_total;
+					modedb[i].xres += spt->xres;
+					h_total = modedb[i].xres +
+						modedb[i].left_margin +
+						modedb[i].right_margin +
+						modedb[i].hsync_len;
+					v_total = modedb[i].yres +
+						modedb[i].lower_margin +
+						modedb[i].upper_margin +
+						modedb[i].vsync_len;
+					pclk = h_total * v_total * modedb[i].refresh;
+					modedb[i].pixclock = KHZ2PICOS(pclk / 1000);
+				} else {
+					pr_debug("no matching split config for %s\n",
+							modedb[i].name);
+				}
+
+				/*
+				 * if no panel timing found for current, need to
+				 * disable it otherwise mark it as active
+				 */
+				if (pt == pdata->current_timing)
+					pdata->next->active = !IS_ERR_OR_NULL(spt);
+			}
+
+			if (pt == pdata->current_timing) {
+				pr_debug("found current mode: %s\n", pt->name);
+				fbi->mode = modedb + i;
+			}
+
+			pr_info("Adding display mode[%d]: name=%s, x,y=%ux%u fps=%u\n",
+					i, modedb[i].name, modedb[i].xres, modedb[i].yres,
+					modedb[i].refresh);
+
+			i++;
+		}
+		pt->frame_rate = orig_fps;
+#else
 		mdss_fb_videomode_from_panel_timing(modedb + i, pt);
 		if (pdata->next) {
 			spt = mdss_panel_get_timing_by_name(pdata->next,
@@ -1313,6 +1381,7 @@ static int mdss_fb_init_panel_modes(struct msm_fb_data_type *mfd,
 			fbi->mode = modedb + i;
 		}
 		i++;
+#endif
 	}
 
 	fbi->monspecs.modedb = modedb;
@@ -4232,6 +4301,14 @@ static int mdss_fb_videomode_switch(struct msm_fb_data_type *mfd,
 			continue;
 		}
 		timing = mdss_panel_get_timing_by_name(tmp, mode->name);
+#ifdef CONFIG_MACH_RCL
+		if (!timing) {
+			pr_warn("mode name is NULL -- searching by res\n");
+			timing = mdss_panel_get_timing_by_res(tmp, mode->xres, mode->yres);
+			if (!timing)
+				pr_err("Failed to find mode by res!\n");
+		}
+#endif
 		ret = tmp->event_handler(tmp,
 				MDSS_EVENT_PANEL_TIMING_SWITCH, timing);
 
@@ -4324,7 +4401,37 @@ static int mdss_fb_set_par(struct fb_info *info)
 
 	if (info->mode) {
 		const struct fb_videomode *mode;
+#ifdef CONFIG_MACH_RCL
+		struct mdss_panel_data *pdata = dev_get_platdata(&mfd->pdev->dev);
+		struct dynamic_fps_data dfps_data = {0};
 
+		mode = fb_match_mode(var, &info->modelist);
+		if (!mode) {
+			pr_err("Didn't find a matching mode\n");
+			return -EINVAL;
+		}
+
+		pr_debug("found mode: %s, x,y=%ux%u, fps=%u\n",
+				 mode->name, mode->xres, mode->yres, mode->refresh);
+
+		if (fb_mode_is_equal(mode, info->mode)) {
+			pr_debug("mode is equal to current mode\n");
+			return 0;
+		}
+
+		ret = mdss_fb_videomode_switch(mfd, mode);
+		if (ret) {
+			pr_warn("failed to switch modes\n");
+			return ret;
+		}
+
+		dfps_data.fps = mode->refresh;
+		ret = mdss_fb_dfps_update_params(mfd, pdata, &dfps_data);
+		if (ret) {
+			pr_err("failed to set dfps params\n");
+			return ret;
+		}
+#else
 		mode = fb_match_mode(var, &info->modelist);
 		if (!mode)
 			return -EINVAL;
@@ -4339,6 +4446,7 @@ static int mdss_fb_set_par(struct fb_info *info)
 		ret = mdss_fb_videomode_switch(mfd, mode);
 		if (ret)
 			return ret;
+#endif
 	}
 
 	if (mfd->mdp.fb_stride)
@@ -5359,29 +5467,6 @@ int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 		ret = mdss_fb_async_position_update_ioctl(info, argp);
 		break;
 
-#ifdef CONFIG_MACH_RCL
-	case MSMFB_RAZER_MODE_SWITCH: {
-		struct dynamic_mode_switch_data mode_data = {0, 0};
-		ret = copy_from_user(&mode_data, argp, sizeof(mode_data));
-		if (ret) {
-			pr_err("%s: MSMFB_RAZER_MODE_SWITCH ioctl failed\n", __func__);
-			goto exit;
-		}
-
-		ret = mdss_fb_mode_switch(mfd, mode_data.mode);
-		if (!ret) {
-			struct dynamic_fps_data dfps_data = {0};
-
-			pr_debug("%s: MSMFB_RAZER_MODE_SWITCH -- fps=%u", __func__, mode_data.fps);
-			if (mode_data.fps > 0) {
-				dfps_data.fps = mode_data.fps;
-				ret = mdss_fb_set_dfps_max(mfd, pdata, &dfps_data);
-			}
-		}
-		break;
-	}
-#endif
-
 	default:
 		if (mfd->mdp.ioctl_handler)
 			ret = mfd->mdp.ioctl_handler(mfd, cmd, argp);
@@ -5583,6 +5668,7 @@ int mdss_fb_dfps_update_params(struct msm_fb_data_type *mfd,
 	u32 dfps = 0;
 
 	if (dfps_data == NULL) {
+		pr_err("dfps_data is NULL!\n");
 		return -EINVAL;
 	}
 	dfps = dfps_data->fps;
@@ -5616,83 +5702,6 @@ int mdss_fb_dfps_update_params(struct msm_fb_data_type *mfd,
 
 	MDSS_XLOG(dfps);
 	mutex_unlock(&mdp5_data->dfps_lock);
-
-	return 0;
-}
-
-int mdss_fb_set_dfps_max(struct msm_fb_data_type *mfd,
-			 struct mdss_panel_data *pdata,
-			 struct dynamic_fps_data *dfps_data)
-{
-	int panel_max_fps, panel_min_fps, current_fps;
-	int rc = 0;
-	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
-
-	if (dfps_data == NULL) {
-		return -EINVAL;
-	}
-
-	if (!mdp5_data->ctl || !mdss_mdp_ctl_is_power_on(mdp5_data->ctl) ||
-			mdss_panel_is_power_off(mfd->panel_power_state)) {
-		pr_debug("panel is off\n");
-		return 0;
-	}
-
-	if (!pdata->panel_info.dynamic_fps) {
-		pr_err_once("Dynamic fps not enabled for this panel\n");
-		return -EINVAL;
-	}
-
-	if (pdata->panel_info.type != MIPI_VIDEO_PANEL &&
-			pdata->panel_info.type != MIPI_CMD_PANEL) {
-		return -EINVAL;
-	}
-
-	if (pdata->panel_info.dfps_update == DFPS_IMMEDIATE_MULTI_UPDATE_MODE_CLK_HFP ||
-			pdata->panel_info.dfps_update == DFPS_IMMEDIATE_MULTI_MODE_HFP_CALC_CLK) {
-		pr_err("DFPS update mode not support for max fps\n");
-		return -EINVAL;
-	}
-
-	if (dfps_data->fps == 0) {
-		return -EINVAL;
-	}
-
-	panel_max_fps = mdss_panel_get_max_framerate(&pdata->panel_info);
-	if (dfps_data->fps == panel_max_fps) {
-		pr_debug("Max FPS is already %d\n", dfps_data->fps);
-		return 0;
-	}
-	panel_min_fps = mdss_panel_get_min_framerate(&pdata->panel_info);
-	if (dfps_data->fps < panel_min_fps) {
-		dfps_data->fps = panel_min_fps;
-	}
-
-	current_fps = mdss_panel_get_framerate(&pdata->panel_info);
-	if (dfps_data->fps < current_fps) {
-		rc = mdss_fb_dfps_update_params(mfd, pdata, dfps_data);
-		if (rc) {
-			pr_err("failed to set dfps params\n");
-			return rc;
-		}
-	}
-
-	mutex_lock(&mdp5_data->dfps_lock);
-
-	pdata->panel_info.max_fps = dfps_data->fps;
-	if (pdata->next) {
-		pdata->next->panel_info.max_fps = dfps_data->fps;
-	}
-
-	mutex_unlock(&mdp5_data->dfps_lock);
-
-	if (dfps_data->fps > current_fps) {
-		rc = mdss_fb_dfps_update_params(mfd, pdata, dfps_data);
-		if (rc) {
-			pr_err("failed to set dfps params\n");
-			return rc;
-		}
-	}
 
 	return 0;
 }
