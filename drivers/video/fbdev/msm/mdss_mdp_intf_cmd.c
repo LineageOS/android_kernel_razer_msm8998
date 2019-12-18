@@ -1063,6 +1063,25 @@ int mdss_mdp_resource_control(struct mdss_mdp_ctl *ctl, u32 sw_event)
 		 * Driver will not allow off work under one condition:
 		 * 1. Kickoff is pending.
 		 */
+#ifdef CONFIG_MACH_RCL
+		if (schedule_off) {
+			int enable_boost = 1;
+			mdss_mdp_ctl_intf_event(ctl,
+					MDSS_EVENT_PANEL_INPUT_BOOST,
+					(void *) (unsigned long) enable_boost,
+					CTL_INTF_EVENT_FLAG_DEFAULT);
+			if (!ctl->mfd->atomic_commit_pending) {
+				/*
+				 * Schedule off work after cmd mode idle timeout is
+				 * reached. This is to prevent the case where early wake
+				 * up is called but no frame update is sent.
+				 */
+				schedule_delayed_work(&ctx->delayed_off_clk_work,
+						  CMD_MODE_IDLE_TIMEOUT);
+				pr_debug("off work scheduled\n");
+			}
+		}
+#else
 		if (schedule_off && !ctl->mfd->atomic_commit_pending) {
 			/*
 			 * Schedule off work after cmd mode idle timeout is
@@ -1073,6 +1092,7 @@ int mdss_mdp_resource_control(struct mdss_mdp_ctl *ctl, u32 sw_event)
 				      CMD_MODE_IDLE_TIMEOUT);
 			pr_debug("off work scheduled\n");
 		}
+#endif
 		mutex_unlock(&ctl->rsrc_lock);
 		break;
 	default:
@@ -1725,6 +1745,13 @@ static void clk_ctrl_delayed_off_work(struct work_struct *work)
 		pr_err("cannot disable clks while autorefresh is not off\n");
 		goto exit;
 	}
+
+#ifdef CONFIG_MACH_RCL
+	/* Disable input boost before going into power collapse */
+	mdss_mdp_ctl_intf_event(ctl,
+			MDSS_EVENT_PANEL_INPUT_BOOST,
+			0, CTL_INTF_EVENT_FLAG_DEFAULT);
+#endif
 
 	/* Enable clocks if Gate feature is enabled and we are in this state */
 	if (mdata->enable_gate && (mdp5_data->resources_state
@@ -3574,11 +3601,6 @@ static void early_wakeup_work(struct work_struct *work)
 	struct mdss_mdp_cmd_ctx *ctx =
 		container_of(work, typeof(*ctx), early_wakeup_clk_work);
 	struct mdss_mdp_ctl *ctl;
-#ifdef CONFIG_MACH_RCL
-	struct mdss_panel_data *pdata;
-	struct mdss_panel_info *pinfo;
-	struct dynamic_fps_data data = {0};
-#endif
 
 	if (!ctx) {
 		pr_err("%s: invalid ctx\n", __func__);
@@ -3593,43 +3615,9 @@ static void early_wakeup_work(struct work_struct *work)
 		goto fail;
 	}
 
-#ifdef CONFIG_MACH_RCL
-	pdata = ctl->panel_data;
-	if (!pdata) {
-		goto fail;
-	}
-	pinfo = &ctl->panel_data->panel_info;
-	if (!pinfo) {
-		goto fail;
-	}
-#endif
-
 	rc = mdss_mdp_resource_control(ctl, MDP_RSRC_CTL_EVENT_EARLY_WAKE_UP);
 	if (rc)
 		pr_err("%s: failed to control resources\n", __func__);
-
-#ifdef CONFIG_MACH_RCL
-	if (!pinfo->dynamic_fps || !pinfo->default_fps) {
-		pr_debug("%s: dfps not enabled on this panel\n", __func__);
-		goto fail;
-	}
-
-	/* We want to boost the FPS to the max allowed for better UX. */
-	if (pinfo->max_fps == pinfo->mipi.frame_rate) {
-		pr_debug("%s: FPS is already %d\n",
-			__func__, pinfo->max_fps);
-		goto fail;
-	}
-
-	data.fps = pinfo->max_fps;
-	if (mdss_fb_dfps_update_params(ctl->mfd, pdata, &data))
-		pr_err("failed to set dfps params!\n");
-
-	rc = mdss_mdp_ctl_update_fps(ctl);
-	if (rc)
-		pr_err("early wakeup failed to set %d fps ret=%d\n",
-			data.fps, rc);
-#endif
 
 fail:
 	ATRACE_END(__func__);
@@ -3927,6 +3915,47 @@ void mdss_mdp_switch_to_vid_mode(struct mdss_mdp_ctl *ctl, int prep)
 			(void *) mode, CTL_INTF_EVENT_FLAG_DEFAULT);
 }
 
+#ifdef CONFIG_MACH_RCL
+static int mdss_mdp_status_check_te(struct mdss_mdp_ctl *ctl, int trigger) {
+	struct mdss_panel_data *pdata;
+	int rc = 0, te_irq;
+	int const te_timeout = msecs_to_jiffies(3*20);
+
+	pdata = ctl->panel_data;
+	if (!pdata) {
+		pr_err("invalid panel data\n");
+		return -EINVAL;
+	}
+
+	if (trigger == IRQF_TRIGGER_RISING) {
+		pdata->te_gpio_trigger_val = 1;
+	} else if (trigger == IRQF_TRIGGER_FALLING) {
+		pdata->te_gpio_trigger_val = 0;
+	} else {
+		pr_err("Invalid trigger: %d\n", trigger);
+		return -EINVAL;
+	}
+
+	pdata->te_gpio_prev_val = -1;
+
+	/* enable TE irq to check if it is coming from the panel */
+	te_irq = gpio_to_irq(pdata->panel_te_gpio);
+	enable_irq(te_irq);
+
+	reinit_completion(&pdata->te_done);
+	if (!wait_for_completion_timeout(&pdata->te_done, te_timeout)) {
+		pr_err("%s: Timed out waiting for TE %s\n", __func__,
+			   trigger == IRQF_TRIGGER_RISING ? "rising" : "falling");
+		mdss_fb_report_panel_dead(ctl->mfd);
+		rc = -ETIMEDOUT;
+	}
+
+	/* disable te irq */
+	disable_irq_nosync(te_irq);
+	return rc;
+}
+#endif
+
 static int mdss_mdp_cmd_reconfigure(struct mdss_mdp_ctl *ctl,
 		enum dynamic_switch_modes mode, bool prep)
 {
@@ -3941,6 +3970,14 @@ static int mdss_mdp_cmd_reconfigure(struct mdss_mdp_ctl *ctl,
 	} else if (mode == SWITCH_RESOLUTION) {
 		if (prep) {
 			mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
+
+#ifdef CONFIG_MACH_RCL
+			/* Sync on TE falling before sending panel switch commands */
+			if (mdss_mdp_status_check_te(ctl, IRQF_TRIGGER_FALLING)) {
+				pr_err("%s: failed to check TE status!\n", __func__);
+			}
+#endif
+
 			/*
 			 * Setup DSC conifg early, as DSI configuration during
 			 * resolution switch would rely on DSC params for

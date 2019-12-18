@@ -929,7 +929,8 @@ int fb_mode_is_equal(const struct fb_videomode *mode1,
 		mode1->upper_margin == mode2->upper_margin &&
 		mode1->lower_margin == mode2->lower_margin &&
 		mode1->sync         == mode2->sync &&
-		mode1->vmode        == mode2->vmode);
+		mode1->vmode        == mode2->vmode &&
+		mode1->refresh      == mode2->refresh);
 }
 
 /**
