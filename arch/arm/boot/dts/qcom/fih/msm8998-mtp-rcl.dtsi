@@ -265,7 +265,7 @@
 &mdss_dsi0 {
 	wqhd-vdd-supply = <&pm8998_l6>;
 
-	qcom,dsi-pref-prim-pan = <&dsi_nt36830_wqhd_dualdsi_cmd>;
+	qcom,dsi-pref-prim-pan = <&dsi_nt36830_wqhd_dualdsi_cmd_10bit>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
@@ -276,7 +276,7 @@
 &mdss_dsi1 {
 	wqhd-vdd-supply = <&pm8998_l6>;
 
-	qcom,dsi-pref-prim-pan = <&dsi_nt36830_wqhd_dualdsi_cmd>;
+	qcom,dsi-pref-prim-pan = <&dsi_nt36830_wqhd_dualdsi_cmd_10bit>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
@@ -294,6 +294,23 @@
 	qcom,fs-curr-ua = <20000>;
 	qcom,switch-freq-khz = <1600>;
 	qcom,en-cabc;
+};
+
+&dsi_nt36830_wqhd_dualdsi_cmd_10bit {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,esd-check-enabled;
+	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+	qcom,mdss-dsi-t-clk-post = <0x0b>;
+	qcom,mdss-dsi-t-clk-pre = <0x21>;
+	qcom,mdss-dsi-mode-sel-gpio-state = "dual_port";
+	qcom,mdss-dsi-display-timings {
+		wqhd { /* wqhd */
+			qcom,mdss-dsi-panel-timings = [00 13 05 04 1f 1e 05 05 03 03 04 00];
+		};
+	};
 };
 
 &mem_client_3_size {

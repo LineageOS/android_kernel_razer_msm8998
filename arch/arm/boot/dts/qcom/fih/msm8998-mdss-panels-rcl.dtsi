@@ -10,8 +10,7 @@
  * GNU General Public License for more details.
  */
 
-#include "dsi-panel-nt36830-wqhd-dualmipi-cmd.dtsi"
-#include "dsi-panel-nt36830-wqhd-dualmipi-video.dtsi"
+#include "dsi-panel-nt36830-wqhd-dualmipi-cmd-10bit.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
