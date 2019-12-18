@@ -1933,6 +1933,39 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 	return 0;
 }
 
+#ifdef CONFIG_MACH_RCL
+static irqreturn_t mdss_dsi_panel_te_irq_handler(int irq, void *data) {
+	struct mdss_panel_data *pdata = (struct mdss_panel_data *)data;
+	int val;
+
+	if (!pdata) {
+		return IRQ_HANDLED;
+	}
+
+	val = gpio_get_value(pdata->panel_te_gpio);
+
+	if (pdata->te_gpio_prev_val < 0) {
+		pdata->te_gpio_prev_val = val;
+		return IRQ_HANDLED;
+	}
+
+	if (pdata->te_gpio_prev_val == val) {
+		return IRQ_HANDLED;
+	}
+
+	pdata->te_gpio_prev_val = val;
+
+	if (val == pdata->te_gpio_trigger_val) {
+		complete_all(&pdata->te_done);
+		if (pdata->next) {
+			complete_all(&pdata->next->te_done);
+		}
+	}
+
+	return IRQ_HANDLED;
+}
+#endif
+
 static irqreturn_t test_hw_vsync_handler(int irq, void *data)
 {
 	struct mdss_panel_data *pdata = (struct mdss_panel_data *)data;
@@ -3233,6 +3266,19 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 					rc);
 		}
 		break;
+#ifdef CONFIG_MACH_RCL
+	case MDSS_EVENT_PANEL_INPUT_BOOST:
+		if (ctrl_pdata->input_boost_ctrl &&
+				mdss_dsi_is_ctrl_clk_master(ctrl_pdata)) {
+			int enable_boost = (int)(unsigned long) arg;
+			rc = ctrl_pdata->input_boost_ctrl(pdata, enable_boost);
+			if (rc) {
+				pr_err("%s: Failed to send input boost\n", __func__);
+				rc = 0; // Just warn on failure
+			}
+		}
+		break;
+#endif
 	default:
 		pr_debug("%s: unhandled event=%d\n", __func__, event);
 		break;
@@ -3810,7 +3856,11 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		if (!te_irq_registered) {
 			rc = devm_request_irq(&pdev->dev,
 				gpio_to_irq(pdata->panel_te_gpio),
+#ifdef CONFIG_MACH_RCL
+				mdss_dsi_panel_te_irq_handler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
+#else
 				test_hw_vsync_handler, IRQF_TRIGGER_FALLING,
+#endif
 				"VSYNC_GPIO", &ctrl_pdata->panel_data);
 			if (rc) {
 				pr_err("%s: TE request_irq failed\n", __func__);

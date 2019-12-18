@@ -968,7 +968,6 @@ static int mdss_dsi_panel_refresh_rate_ctl(struct mdss_panel_data *pdata, int ra
 	struct mdss_dsi_ctrl_pdata *ctrl;
 	struct refresh_rate_config *cfg;
 	u32 vfp;
-	u32 non_refresh_frames = 0;
 	u32 flags = CMD_REQ_COMMIT;
 	int rc = 0;
 	int count = 0;
@@ -986,30 +985,17 @@ static int mdss_dsi_panel_refresh_rate_ctl(struct mdss_panel_data *pdata, int ra
 
 	// Convert the refresh rate to VFP from below equation:
 	//    rate = CLK / ((height + VBP + VPW + VFP) * (width + HBP + HFP + HPW) * sizeof(pixel) / num_lanes)
-	if (rate > 60) {
-		non_refresh_frames = 0;
-		vfp = ((522547200 / rate) - 4327680) / 1680;
-	} else if (rate >= 30) {
-		// Divide frame refresh in half
-		non_refresh_frames = 1;
-		vfp = ((522547200 / rate / 2) - 4327680) / 1680;
-	} else {
-		pr_err("%s: invalid refresh rate -- %d\n", __func__, rate);
-		return -EINVAL;
-	}
-
-	cfg->config_cmds.cmds[2].payload[1] = non_refresh_frames;
+	vfp = ((522000000 / rate) - 4327680) / 1680;
 
 	// Note: These below patches need to be updated if the associated DTSI commands change
 	// Command mode VFP
-	cfg->config_cmds.cmds[3].payload[1] = (vfp >> 8) & 0xff;
-	cfg->config_cmds.cmds[4].payload[1] = vfp & 0xff;
+	cfg->config_cmds.cmds[2].payload[1] = (vfp >> 8) & 0xff;
+	cfg->config_cmds.cmds[3].payload[1] = vfp & 0xff;
 
 	cfg->enabled = true;
 	cfg->rate = rate;
 
-	pr_debug("%s: sending panel VFP commands -- non-refresh=0x%x, vfp=0x%x (cmd: 0x%x, 0x%x, video: 0x, 0x)", __func__,
-		cfg->config_cmds.cmds[2].payload[1],
+	pr_debug("%s: sending panel VFP commands -- vfp=0x%x (cmd: 0x%x, 0x%x)", __func__,
 		vfp,
 		cfg->config_cmds.cmds[3].payload[1],
 		cfg->config_cmds.cmds[4].payload[1]);
@@ -1019,6 +1005,53 @@ static int mdss_dsi_panel_refresh_rate_ctl(struct mdss_panel_data *pdata, int ra
 		pr_err("%s: failed to send refresh rate DDIC commands!\n", __func__);
 		rc = 1;
 	}
+	return rc;
+}
+
+static int mdss_dsi_panel_input_boost_ctrl(struct mdss_panel_data *pdata,
+										   int enable)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl;
+	struct input_boost_config *cfg;
+	u32 flags = CMD_REQ_COMMIT;
+	int rc = 0;
+	int count = 0;
+	int req_idle_frames = 0;
+
+	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+	if (ctrl == NULL) {
+		return -EINVAL;
+	}
+
+	cfg = &ctrl->input_boost_cfg;
+	if (cfg->config_cmds.cmd_cnt == 0) {
+		pr_debug("%s: Input boost not supported on this panel\n", __func__);
+		return 0;
+	}
+
+	// TODO: add early exit when QSYNC is enabled
+
+	req_idle_frames = enable ? 0 : cfg->num_idle_frames;
+	if (req_idle_frames == ctrl->cur_num_idle_frames) {
+		pr_debug("%s: idle frames already set to %d\n", __func__, req_idle_frames);
+		goto exit;
+	}
+	cfg->config_cmds.cmds[2].payload[1] = req_idle_frames;
+
+	pr_debug("sending input boost commands -- idle_frames=0x%x ",
+			 cfg->config_cmds.cmds[2].payload[1]);
+
+	count = mdss_dsi_panel_cmds_send(ctrl, &cfg->config_cmds, flags);
+	if (!count) {
+		pr_err("failed to send input boost DDIC commands!\n");
+		rc = 1;
+		goto exit;
+	}
+
+	ctrl->cur_num_idle_frames = req_idle_frames;
+
+exit:
 	return rc;
 }
 #endif
@@ -1807,18 +1840,27 @@ static int mdss_dsi_parse_dsc_params(struct device_node *np,
 	dsc->block_pred_enable = of_property_read_bool(np,
 			"qcom,mdss-dsc-block-prediction-enable");
 
+#ifndef CONFIG_MACH_RCL
 	dsc->enable_422 = 0;
 	dsc->convert_rgb = 1;
 	dsc->vbr_enable = 0;
+#endif
 
 	dsc->config_by_manufacture_cmd = of_property_read_bool(np,
 		"qcom,mdss-dsc-config-by-manufacture-cmd");
 
+#ifndef CONFIG_MACH_RCL
 	mdss_panel_dsc_parameters_calc(&timing->dsc);
 	mdss_panel_dsc_pclk_param_calc(&timing->dsc, intf_width);
+#endif
 
 	timing->dsc.full_frame_slices =
 		DIV_ROUND_UP(intf_width, timing->dsc.slice_width);
+
+#ifdef CONFIG_MACH_RCL
+	mdss_panel_dsc_parameters_calc(&timing->dsc);
+	mdss_panel_dsc_pclk_param_calc(&timing->dsc, intf_width);
+#endif
 
 	timing->compression_mode = COMPRESSION_DSC;
 
@@ -2378,14 +2420,32 @@ static void mdss_dsi_parse_partial_update_caps(struct device_node *np,
 
 #ifdef CONFIG_MACH_RCL
 static int mdss_dsi_parse_refresh_rate_configs(struct device_node *np,
-		struct mdss_dsi_ctrl_pdata *ctrl)
+		struct dsi_panel_timing *pt)
 {
-	mdss_dsi_parse_dcs_cmds(np, &ctrl->refresh_rate_cfg.config_cmds,
-			"razer,refresh-rate-config-cmds",
-			"razer,refresh-rate-config-cmds-state");
+	mdss_dsi_parse_dcs_cmds(np, &pt->refresh_rate_cfg.config_cmds,
+			"razer,refresh-rate-config-command",
+			"razer,refresh-rate-config-command-state");
 
-	ctrl->refresh_rate_cfg.rate = 0;
-	ctrl->refresh_rate_cfg.enabled = false;
+	pt->refresh_rate_cfg.rate = 0;
+	pt->refresh_rate_cfg.enabled = false;
+	return 0;
+}
+
+static int mdss_dsi_parse_input_boost_config(struct device_node *np,
+		struct dsi_panel_timing *pt)
+{
+	int rc = 0;
+	mdss_dsi_parse_dcs_cmds(np, &pt->input_boost_cfg.config_cmds,
+				"razer,input-boost-commands",
+				"razer,input-boost-commands-state");
+
+	rc = of_property_read_u32(np,
+				"razer,mdss-dsi-num-idle-frames",
+				&pt->input_boost_cfg.num_idle_frames);
+	if (rc) {
+		// On failure, default to 4 frames
+		pt->input_boost_cfg.num_idle_frames = 4;
+	}
 	return 0;
 }
 #endif
@@ -2448,10 +2508,6 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &ctrl->lp_off_cmds,
 			"qcom,mdss-dsi-lp-mode-off", NULL);
 
-#ifdef CONFIG_MACH_RCL
-	mdss_dsi_parse_refresh_rate_configs(np, ctrl);
-#endif
-
 	return 0;
 }
 
@@ -2509,6 +2565,9 @@ static int mdss_dsi_set_refresh_rate_range(struct device_node *pan_node,
 		struct mdss_panel_info *pinfo)
 {
 	int rc = 0;
+#ifdef CONFIG_MACH_RCL
+	int num_rates = 0;
+#endif
 	rc = of_property_read_u32(pan_node,
 			"qcom,mdss-dsi-min-refresh-rate",
 			&pinfo->min_fps);
@@ -2554,6 +2613,46 @@ static int mdss_dsi_set_refresh_rate_range(struct device_node *pan_node,
 		 */
 		pinfo->avr_min_fps = pinfo->min_fps;
 		rc = 0;
+	}
+
+	num_rates = of_property_count_u32_elems(pan_node,
+		"razer,mdss-dsi-refresh-rates");
+	if (num_rates > 0) {
+		int i;
+		pinfo->fps_rates = kzalloc(sizeof(pinfo->fps_rates[0]) *
+				num_rates, GFP_KERNEL);
+
+		if (!pinfo->fps_rates) {
+			pr_err("unable to allocate memory for refresh rates\n");
+			rc = -ENOMEM;
+			goto error;
+		}
+
+		rc = of_property_read_u32_array(pan_node,
+				"razer,mdss-dsi-refresh-rates",
+				pinfo->fps_rates,
+				num_rates);
+		if (rc) {
+			pr_err("unable to read refresh rates\n");
+			kfree(pinfo->fps_rates);
+			pinfo->fps_rates = NULL;
+			rc = -EINVAL;
+			goto error;
+		}
+
+		for (i = 0; i < num_rates; i++) {
+			if (pinfo->fps_rates[i] < pinfo->min_fps ||
+				pinfo->fps_rates[i] > pinfo->max_fps) {
+				pr_err("refresh rate %d is out of bounds\n",
+					pinfo->fps_rates[i]);
+				kfree(pinfo->fps_rates);
+				pinfo->fps_rates = NULL;
+				rc = -EINVAL;
+				goto error;
+			}
+		}
+
+		pinfo->num_fps_rates = num_rates;
 	}
 
 	pr_info("dyn_fps: min = %d, max = %d, avr_min = %d\n",
@@ -2737,6 +2836,10 @@ int mdss_dsi_panel_timing_switch(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	ctrl->on_cmds = pt->on_cmds;
 	ctrl->post_panel_on_cmds = pt->post_panel_on_cmds;
+#ifdef CONFIG_MACH_RCL
+	ctrl->refresh_rate_cfg = pt->refresh_rate_cfg;
+	ctrl->input_boost_cfg = pt->input_boost_cfg;
+#endif
 
 	ctrl->panel_data.current_timing = timing;
 	if (!timing->clk_rate)
@@ -2894,6 +2997,13 @@ static int  mdss_dsi_panel_config_res_properties(struct device_node *np,
 	}
 
 	mdss_panel_parse_te_params(np, &pt->timing);
+
+#ifdef CONFIG_MACH_RCL
+	mdss_dsi_parse_refresh_rate_configs(np, pt);
+
+	mdss_dsi_parse_input_boost_config(np, pt);
+#endif
+
 	return rc;
 }
 
@@ -3285,6 +3395,8 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
 #ifdef CONFIG_MACH_RCL
 	ctrl_pdata->refresh_rate_ctl = mdss_dsi_panel_refresh_rate_ctl;
+	ctrl_pdata->input_boost_ctrl = mdss_dsi_panel_input_boost_ctrl;
+	ctrl_pdata->cur_num_idle_frames = U32_MAX;
 #endif
 
 	return 0;
