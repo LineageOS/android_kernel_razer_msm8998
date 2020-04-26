@@ -48,8 +48,13 @@
  *      in the panel devicetree. Boolean.
  */
 
+#ifdef CONFIG_MACH_RCL
+extern int mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
+		struct dsi_panel_cmds *pcmds, u32 flags);
+#else
 extern void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 		struct dsi_panel_cmds *pcmds, u32 flags);
+#endif
 
 static int parse_dsi_cmds(struct mdss_livedisplay_ctx *mlc,
 		struct dsi_panel_cmds *pcmds, const uint8_t *cmd, int blen)
