@@ -938,63 +938,6 @@ static ssize_t mdss_fb_idle_pc_notify(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "idle power collapsed\n");
 }
 
-#ifdef CONFIG_MACH_RCL
-static ssize_t mdss_mdp_bl_skip_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct fb_info *fbi = dev_get_drvdata(dev);
-	struct msm_fb_data_type *mfd = fbi->par;
-	int ret;
-
-	if (mfd == NULL || mfd->panel_info == NULL)
-		return -EINVAL;
-
-	ret = scnprintf(buf, PAGE_SIZE, "%d", mfd->panel_info->bl_skip_enabled);
-
-	return ret;
-}
-
-static ssize_t mdss_mdp_bl_skip_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct fb_info *fbi = dev_get_drvdata(dev);
-	struct msm_fb_data_type *mfd = fbi->par;
-	int ret, val;
-
-	if (mfd == NULL || mfd->panel_info == NULL)
-		return -EINVAL;
-
-	ret = kstrtoint(buf, 10, &val);
-	if (ret) {
-		pr_err("Invalid value for bl_skip_en\n");
-		return -EINVAL;
-	}
-
-	mfd->panel_info->bl_skip_enabled = (val > 0) ? true : false;
-	sysfs_notify(&dev->kobj, NULL, "bl_skip_en");
-
-	return count;
-}
-#endif
-
-static ssize_t mdss_fb_get_mode_switch_event(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct fb_info *fbi = dev_get_drvdata(dev);
-	struct msm_fb_data_type *mfd = fbi->par;
-	int ret;
-
-	if (!mfd || !mfd->panel_info) {
-		pr_err("%s: no panel info\n", __func__);
-		return -EINVAL;
-	}
-
-	pr_debug("mdss mode switch event -- %d\n", mfd->panel_info->type);
-	/* MIPI_CMD_PANEL or MIPI_VIDEO_PANEL */
-	ret = scnprintf(buf, PAGE_SIZE, "%d\n", mfd->panel_info->type);
-	return ret;
-}
-
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -1016,11 +959,6 @@ static DEVICE_ATTR(measured_fps, S_IRUGO | S_IWUSR | S_IWGRP,
 static DEVICE_ATTR(msm_fb_persist_mode, S_IRUGO | S_IWUSR,
 	mdss_fb_get_persist_mode, mdss_fb_change_persist_mode);
 static DEVICE_ATTR(idle_power_collapse, S_IRUGO, mdss_fb_idle_pc_notify, NULL);
-#ifdef CONFIG_MACH_RCL
-static DEVICE_ATTR(mode_switch_event, S_IRUGO, mdss_fb_get_mode_switch_event, NULL);
-static DEVICE_ATTR(bl_skip_en, S_IRUGO | S_IWUSR | S_IWGRP, mdss_mdp_bl_skip_show,
-	mdss_mdp_bl_skip_store);
-#endif
 
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
@@ -1036,10 +974,6 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_measured_fps.attr,
 	&dev_attr_msm_fb_persist_mode.attr,
 	&dev_attr_idle_power_collapse.attr,
-#ifdef CONFIG_MACH_RCL
-	&dev_attr_mode_switch_event.attr,
-	&dev_attr_bl_skip_en.attr,
-#endif
 	NULL,
 };
 
@@ -2091,8 +2025,6 @@ static int mdss_fb_blank_blank(struct msm_fb_data_type *mfd,
 			mfd->panel_info->type = translated_mode;
 			mfd->panel.type = translated_mode;
 			mutex_unlock(&mfd->switch_lock);
-
-			sysfs_notify(&mfd->fbi->dev->kobj, NULL, "mode_switch_event");
 
 			if (translated_mode == MIPI_CMD_PANEL && mfd->mdp.kickoff_fnc) {
 				ret = mfd->mdp.kickoff_fnc(mfd, NULL);
@@ -4047,9 +3979,6 @@ static int __mdss_fb_perform_commit(struct msm_fb_data_type *mfd)
 
 			if (new_dsi_mode != SWITCH_RESOLUTION)
 				mfd->panel.type = new_dsi_mode;
-
-			// Notify any listeners that the mode switch is complete
-			sysfs_notify(&mfd->fbi->dev->kobj, NULL, "mode_switch_event");
 
 			pr_info("Dynamic mode switch to %d completed\n", new_dsi_mode);
 		} else {
