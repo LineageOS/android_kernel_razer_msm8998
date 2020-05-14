@@ -20,6 +20,9 @@
 #include <linux/stringify.h>
 #include <linux/types.h>
 #include <linux/debugfs.h>
+#include <linux/of_gpio.h>
+#include <linux/gpio.h>
+#include <linux/interrupt.h>
 
 /* panel id type */
 struct panel_id {
@@ -1041,6 +1044,7 @@ struct mdss_panel_data {
 	bool panel_disable_mode;
 
 	int panel_te_gpio;
+	bool is_te_irq_enabled;
 #ifdef CONFIG_MACH_RCL
 	int te_gpio_trigger_val;
 	int te_gpio_prev_val;
@@ -1055,6 +1059,23 @@ struct mdss_panel_debugfs_info {
 	u32 override_flag;
 	struct mdss_panel_debugfs_info *next;
 };
+
+static inline void panel_update_te_irq(struct mdss_panel_data *pdata,
+					bool enable)
+{
+	if (!pdata) {
+		pr_err("Invalid Params\n");
+		return;
+	}
+
+	if (enable && !pdata->is_te_irq_enabled) {
+		enable_irq(gpio_to_irq(pdata->panel_te_gpio));
+		pdata->is_te_irq_enabled = true;
+	} else if (!enable && pdata->is_te_irq_enabled) {
+		disable_irq(gpio_to_irq(pdata->panel_te_gpio));
+		pdata->is_te_irq_enabled = false;
+	}
+}
 
 #ifdef CONFIG_MACH_RCL
 static inline u32 mdss_panel_get_min_framerate(struct mdss_panel_info *panel_info)
