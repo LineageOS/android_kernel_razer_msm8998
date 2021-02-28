@@ -108,19 +108,19 @@ static int fih_info_proc_open_hwcfg_show(struct seq_file *m, void *v)
 
 	fih_hwid_read(&tb);
 	/* mpp */
-	len = snprintf(msg, PAGE_SIZE, "r1=%d\n", tb.r1);
-	len += snprintf((msg+len), PAGE_SIZE, "r2=%d\n", tb.r2);
-	len += snprintf((msg+len), PAGE_SIZE, "r3=%d\n", tb.r3);
+	len = snprintf(msg, sizeof(msg), "r1=%d\n", tb.r1);
+	len += snprintf((msg+len), sizeof(msg+len), "r2=%d\n", tb.r2);
+	len += snprintf((msg+len), sizeof(msg+len), "r3=%d\n", tb.r3);
 	/* info */
-	len += snprintf((msg+len), PAGE_SIZE, "prj=%d\n", tb.prj);
-	len += snprintf((msg+len), PAGE_SIZE, "rev=%d\n", tb.rev);
-	len += snprintf((msg+len), PAGE_SIZE, "rf=%d\n", tb.rf);
+	len += snprintf((msg+len), sizeof(msg+len), "prj=%d\n", tb.prj);
+	len += snprintf((msg+len), sizeof(msg+len), "rev=%d\n", tb.rev);
+	len += snprintf((msg+len), sizeof(msg+len), "rf=%d\n", tb.rf);
 	/* device tree */
-	len += snprintf((msg+len), PAGE_SIZE, "dtm=%d\n", tb.dtm);
-	len += snprintf((msg+len), PAGE_SIZE, "dtn=%d\n", tb.dtn);
+	len += snprintf((msg+len), sizeof(msg+len), "dtm=%d\n", tb.dtm);
+	len += snprintf((msg+len), sizeof(msg+len), "dtn=%d\n", tb.dtn);
 	/* driver */
-	len += snprintf((msg+len), PAGE_SIZE, "btn=%d\n", tb.btn);
-	len += snprintf((msg+len), PAGE_SIZE, "uart=%d\n", tb.uart);
+	len += snprintf((msg+len), sizeof(msg+len), "btn=%d\n", tb.btn);
+	len += snprintf((msg+len), sizeof(msg+len), "uart=%d\n", tb.uart);
 
 	seq_printf(m, "%s\n", msg);
 
