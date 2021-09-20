@@ -998,8 +998,8 @@ static int mdss_dsi_panel_refresh_rate_ctl(struct mdss_panel_data *pdata, int ra
 
 	pr_debug("%s: sending panel VFP commands -- vfp=0x%x (cmd: 0x%x, 0x%x)", __func__,
 		vfp,
-		cfg->config_cmds.cmds[3].payload[1],
-		cfg->config_cmds.cmds[4].payload[1]);
+		cfg->config_cmds.cmds[2].payload[1],
+		cfg->config_cmds.cmds[3].payload[1]);
 
 	count = mdss_dsi_panel_cmds_send(ctrl, &cfg->config_cmds, flags);
 	if (!count) {
