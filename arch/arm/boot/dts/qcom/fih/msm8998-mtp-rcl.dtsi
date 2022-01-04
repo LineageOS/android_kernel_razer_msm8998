@@ -307,7 +307,7 @@
 	qcom,mdss-dsi-t-clk-pre = <0x19>;
 	qcom,mdss-dsi-mode-sel-gpio-state = "dual_port";
 	qcom,mdss-dsi-display-timings {
-		timing@0{
+		timing@0 {
 			qcom,mdss-dsi-panel-timings = [00 0f 04 03 06 0b 04 04 03 03 04 00];
 		};
 	};
@@ -324,7 +324,7 @@
 	qcom,mdss-dsi-t-clk-pre = <0x21>;
 	qcom,mdss-dsi-mode-sel-gpio-state = "dual_port";
 	qcom,mdss-dsi-display-timings {
-		wqhd { /* wqhd */
+		timing@0 {
 			qcom,mdss-dsi-panel-timings = [00 13 05 04 1f 1e 05 05 03 03 04 00];
 		};
 	};
