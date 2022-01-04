@@ -48,7 +48,7 @@
 
 		qcom,mdss-dsi-min-refresh-rate = <30>;
 		qcom,mdss-dsi-max-refresh-rate = <120>;
-		razer,mdss-dsi-refresh-rates = <30 40 48 50 60 90 120>;
+		razer,mdss-dsi-refresh-rates = <90 120>;
 		razer,mdss-dsi-avr-min-refresh-rate = <48>;
 		qcom,mdss-dsi-pan-enable-dynamic-fps;
 		qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
