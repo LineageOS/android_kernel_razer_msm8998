@@ -16,6 +16,24 @@
       "message": "You need to redo the merge again.",
       "revId": "0b5520413c23a6071f4bcf79f54dfb6bb94fd256",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "87559ed3_e582e1b3",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 16185
+      },
+      "writtenOn": "2022-10-29T00:43:25Z",
+      "side": 1,
+      "message": "done.",
+      "parentUuid": "fc66c93b_db0ee24c",
+      "revId": "0b5520413c23a6071f4bcf79f54dfb6bb94fd256",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
