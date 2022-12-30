@@ -55,14 +55,23 @@
 	};
 
 	wcd_us_euro_gpio: msm_cdc_pinctrl@75 {
+		/delete-property/ pinctrl-names;
+		/delete-property/ pinctrl-0;
+		/delete-property/ pinctrl-1;
 		status = "disabled";
 	};
 
 	wcd_usbc_analog_en1_gpio: msm_cdc_pinctrl@59 {
+		/delete-property/ pinctrl-names;
+		/delete-property/ pinctrl-0;
+		/delete-property/ pinctrl-1;
 		status = "disabled";
 	};
 
 	wcd_usbc_analog_en2n_gpio: msm_cdc_pinctrl@60 {
+		/delete-property/ pinctrl-names;
+		/delete-property/ pinctrl-0;
+		/delete-property/ pinctrl-1;
 		status = "disabled";
 	};
 

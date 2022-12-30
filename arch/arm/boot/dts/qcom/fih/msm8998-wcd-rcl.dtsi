@@ -13,10 +13,32 @@
 &slim_aud {
 	tasha_codec {
 		wsa_spkr_sd1: msm_cdc_pinctrll {
+			/delete-property/ pinctrl-names;
+			/delete-property/ pinctrl-0;
+			/delete-property/ pinctrl-1;
 			status = "disabled";
 		};
 
 		wsa_spkr_sd2: msm_cdc_pinctrlr {
+			/delete-property/ pinctrl-names;
+			/delete-property/ pinctrl-0;
+			/delete-property/ pinctrl-1;
+			status = "disabled";
+		};
+	};
+
+	tavil_codec {
+		wsa_spkr_wcd_sd1: msm_cdc_pinctrll {
+			/delete-property/ pinctrl-names;
+			/delete-property/ pinctrl-0;
+			/delete-property/ pinctrl-1;
+			status = "disabled";
+		};
+
+		wsa_spkr_wcd_sd2: msm_cdc_pinctrlr {
+			/delete-property/ pinctrl-names;
+			/delete-property/ pinctrl-0;
+			/delete-property/ pinctrl-1;
 			status = "disabled";
 		};
 	};

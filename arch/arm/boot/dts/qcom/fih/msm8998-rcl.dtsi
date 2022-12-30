@@ -33,6 +33,11 @@
 		/delete-property/ wake-gpio;
 	};
 
+	cti@6012000 {
+		/delete-property/ pinctrl-names;
+		/delete-property/ pinctrl-0;
+	};
+
 	qcom,bcl {
 		qcom,ibat-monitor {
 			qcom,mitigation-freq-khz = <979200>;
