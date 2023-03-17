@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "edec0866_d2c2ac34",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 29515
+      },
+      "writtenOn": "2023-03-17T16:05:06Z",
+      "side": 1,
+      "message": "Tested on Razer Phone engineering sample DVT-0126.\nRecovery booted.\nSystem booted.",
+      "revId": "931f1766dc0457d960e9b3f70edb0f2c31546853",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
