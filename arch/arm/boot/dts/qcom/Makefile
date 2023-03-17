@@ -177,6 +177,8 @@ else
 
 ifeq ($(CONFIG_MACH_FIH_MSM8998),y)
 dtb-$(CONFIG_ARCH_MSM8998) += \
+	msm8998-v2.1-mtp-rcl-dvt0.dtb \
+	msm8998-v2.1-mtp-rcl-dvt1.dtb \
 	msm8998-v2.1-mtp-rcl-pvt.dtb \
 	msm8998-v2.1-mtp-rcl-mp.dtb
 else
