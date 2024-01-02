@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "e72d7139_0e0a69d1",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 16185
+      },
+      "writtenOn": "2024-01-02T06:29:07Z",
+      "side": 1,
+      "message": "Need to adapt ignore skip_initramfs and normal_boot, but we have codline hax already so, need to work on that",
+      "revId": "c35bf8e18cbd66dc38d7a13b792fcd39d55ec330",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
